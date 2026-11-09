@@ -14,6 +14,41 @@ LOKI takes a natural-language request, plans it, and carries it out on your Mac.
 
 LOKI began as a Final Year Project at Sunway University, Malaysia. It is a research prototype: expect rough edges (see [Known limitations](#known-limitations)).
 
+## What it can do
+
+Speak or type a request. LOKI picks a built-in skill when one fits, and otherwise operates the app's interface step by step. These phrases worked in the project's own demo runs (one Mac, Gemma 4 E2B Q4_K_M). Some are matched by fixed rules and the rest by the model, so results can vary:
+
+| Area | Say this | What happens |
+|:--|:--|:--|
+| Screen | "What is open on my Safari right now?" | Reads the page you are on and your other tabs. |
+| Web | "Search up cats on Safari" | Opens the results in Safari. |
+| Mail | "How many unread emails do I have?" | Reads the unread count. |
+| Mail | "Draft an email to sam@example.com with the subject Friday and the body See you at 3pm" | Opens an unsent draft for you to review. |
+| Calendar | "What's on my calendar today?" | Lists today's events. |
+| Calendar | "Check my Calendar for a free 30 minute slot tomorrow" | Finds the first free slot. |
+| Calendar | "Schedule a meeting called Project Sync tomorrow at 3pm" | Creates a one-hour event. |
+| Reminders | "Remind me in Reminders to call mom tomorrow at 9am" | Adds a reminder with a due time. |
+| Notes | "Create a note in Notes called Groceries with milk and eggs" | Creates the note. |
+| Files | "Search Spotlight for budget" | Lists matching files. |
+| Files | "Show me a plan to organize my Downloads folder, but don't move anything" | Proposes a move plan without touching files. |
+| Contacts | "What is Sam's email in Contacts?" | Reads the address. |
+| Music | "What song is playing on Spotify?" | Reads the current track. Also pause, next and previous, for Spotify and Apple Music. |
+| Music | "Play Blinding Lights on Spotify" | Opens Spotify's search for it. You choose the result. |
+| System | "Set my Mac's volume to 20 percent" | Sets the output volume. Also mute, Wi-Fi name, clipboard and System Settings panes. |
+| Shortcuts | "Run the shortcut named Good Morning" | Runs that Shortcut. |
+| Documents | "Read the PDF called resume" | Reads the PDF's text. |
+
+The full set is 15 skills and 68 intents; `orchestration/src/skills/` has the list. Anything no skill matches goes through the slower interface loop.
+
+**Phrasing matters.** A small local model chooses the skill, so the same request can route differently with different wording:
+
+- Name the app: "in Reminders", "in Notes", "in Contacts".
+- Use exact titles for notes, reminders and Shortcuts.
+- Say "12pm" instead of "noon".
+- For file clean-ups, ask for a plan first.
+
+**Mail and iMessage send as soon as the request is understood.** There is no confirmation step. Use your own address or number while you are testing.
+
 ## How it works
 
 The orchestration server is a LangGraph state machine:
@@ -100,6 +135,7 @@ The STT and TTS tests use the Moonshine and Kokoro runtimes and need the models 
 - macOS only. The interface and the accessibility layer are Apple-specific.
 - A small local model chooses UI actions, so complex multi-step tasks fail more often than with a hosted model. LOKI has no measured end-to-end success rate yet.
 - Applications that expose a poor accessibility tree (some Electron, game and custom-drawn UIs) fall back to OCR, which is less reliable.
+- Routing depends on wording (see above). In testing, dark-mode requests toggled the setting even when asked for "on" or "off".
 - LOKI acts autonomously with the permissions you grant it. Try it on non-critical tasks first and read [SECURITY.md](SECURITY.md).
 - `scripts/calibrate.py` writes `calibration.json` to a different location than `mapper_tools.py` reads, so calibration has no effect.
 - The interface has no automated tests.
