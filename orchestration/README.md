@@ -8,12 +8,14 @@ LOKI runs its LLM in-process via `llama-cpp-python`; no separate model
 server is needed. Point `LOKI_MODEL_PATH` at a local GGUF file (`make llm`
 downloads one into `models/`):
 
+Set these in `.env` at the repository root (copy `.env.example`):
+
 ```bash
-export LOKI_MODEL_PATH=/path/to/gemma-4-e4b-Q4_K_M.gguf
-export LOKI_DRAFT_MODEL_PATH=/path/to/gemma-2b-it-Q8_0.gguf  # optional — speculative decoding
-export LOKI_N_CTX=8192
-export LOKI_N_GPU_LAYERS=-1   # -1 = offload all layers to Metal/GPU
-export LOKI_CHAT_FORMAT=gemma
+LOKI_MODEL_PATH=/path/to/gemma-4-E2B-it-Q4_K_M.gguf
+LOKI_DRAFT_MODEL_PATH=/path/to/gemma-2b-it-Q8_0.gguf  # optional: speculative decoding
+LOKI_N_CTX=8192
+LOKI_N_GPU_LAYERS=-1   # -1 = offload all layers to Metal/GPU
+LOKI_CHAT_FORMAT=gemma
 ```
 
 On macOS, install with Metal acceleration:
@@ -22,10 +24,10 @@ On macOS, install with Metal acceleration:
 CMAKE_ARGS="-DLLAMA_METAL=ON" uv pip install llama-cpp-python --force-reinstall --no-cache-dir
 ```
 
-Run the server:
+Run the server from the repository root:
 
 ```bash
-uv run python server.py
+make server
 ```
 
 ## Speech-to-Text (Moonshine STT)
@@ -43,9 +45,8 @@ STT runs on the ONNX CPU runtime, keeping the GPU and ANE 100% free for the LLM.
 LOKI pins `mlx-audio==0.5.4`, `misaki[en]==0.9.4`, and the `en-core-web-sm==3.8.0` language model for native Apple Silicon inference. Provision the selected model and `af_heart` voice in an explicit installation step:
 
 ```bash
-cd orchestration
-uv sync --frozen
-PYTHONPATH=. uv run python scripts/prepare_tts_model.py
+make setup
+make tts
 ```
 
 The script downloads only the files listed in `model-manifests/kokoro-82m-4bit.json` from the pinned Hugging Face revision and verifies every byte count and SHA-256 digest. The verified artifact set is 283,281,936 bytes. Set `LOKI_TTS_MODEL_PATH` to use a packaged location instead of `orchestration/weights/tts/kokoro-82m-4bit`.

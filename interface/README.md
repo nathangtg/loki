@@ -72,16 +72,17 @@ Sources/LokiOrb/
 
 ## Running
 
-1. Start the Python orchestration server:
+From the repository root:
+
 ```bash
-cd orchestration
-uv run python server.py
+make dev          # start the server, wait for /health, then run the app
 ```
 
-2. Build and run the native macOS Swift app:
+Or run the two halves separately:
+
 ```bash
-cd interface/loki-macos
-swift run
+make server       # Python orchestration server
+make interface    # build and run the macOS app (second terminal)
 ```
 
 ## Building Loki.app

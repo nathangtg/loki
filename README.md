@@ -91,7 +91,7 @@ make dev                 # start the server, wait for /health, launch the app
 
 **Set `LOKI_MODEL_PATH` and `LOKI_MMPROJ_PATH` in `.env`** to the absolute paths of the downloaded files (`models/gemma-4-E2B-it-Q4_K_M.gguf` and `models/mmproj-BF16.gguf`). The server will not start inference without a model path.
 
-**Optional, recommended: `make embeddings`.** UI elements are ranked with EmbeddingGemma-300M. That model is gated on Hugging Face, so first accept its terms at https://huggingface.co/google/embeddinggemma-300m and run `uv run --project orchestration hf auth login`. Without it LOKI still works, but falls back to keyword-only ranking and picks worse targets.
+**Optional, recommended: `make embeddings`.** UI elements are ranked with EmbeddingGemma-300M. That model is gated on Hugging Face, so first accept its terms at https://huggingface.co/google/embeddinggemma-300m and run `make login`. Without it LOKI still works, but falls back to keyword-only ranking and picks worse targets.
 
 Other targets: `make server`, `make interface`, `make app` (builds `Loki.app`), `make verify` (checks model files against their manifests). `make help` lists everything.
 
@@ -116,12 +116,9 @@ See [`orchestration/README.md`](orchestration/README.md) for the LLM, STT and TT
 ## Testing
 
 ```bash
-cd orchestration
-uv run --frozen pytest
-uv run --frozen ruff check .
-
-cd ../interface/loki-macos
-swift build
+make test    # Python tests
+make lint    # Ruff
+make build   # compile the macOS app
 ```
 
 The STT and TTS tests use the Moonshine and Kokoro runtimes and need the models from `make models`. There are no automated tests for the Swift interface.

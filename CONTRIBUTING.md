@@ -24,12 +24,9 @@ See [README.md](README.md) for configuration.
 Run these before opening a pull request:
 
 ```bash
-cd orchestration
-uv run --frozen pytest
-uv run --frozen ruff check .
-
-cd ../interface/loki-macos
-swift build
+make test
+make lint
+make build    # only needed if you changed interface/
 ```
 
 Some tests exercise the Moonshine and Kokoro runtimes and need the models from `make models`.
