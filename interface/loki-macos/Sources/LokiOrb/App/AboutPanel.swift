@@ -2,7 +2,7 @@ import AppKit
 
 enum AboutPanel {
     static let version = "0.1.0"
-    static let helpURL = URL(string: "https://github.com/nathangtg/loki/blob/master/interface/README.md")
+    static let helpURL = URL(string: "https://github.com/nathangtg/loki/blob/main/interface/README.md")
 
     @MainActor
     static func show() {
