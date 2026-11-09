@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: "If you use this software in academic work, please cite it as below."
+title: "LOKI: Local Orchestration Kernel Interface"
+type: software
+license: Apache-2.0
+repository-code: "https://github.com/nathangtg/loki"
+keywords:
+  - desktop-automation
+  - accessibility-tree
+  - multi-agent-systems
+  - large-language-models
+  - human-computer-interaction
+  - macOS
+  - local-inference
+  - on-device-inference
+  - model-quantisation
+  - retrieval-augmented-generation
+  - robotic-process-automation
+  - langgraph
+  - react-agent
+  - gui-automation
+authors:
+  - family-names: "Ginting"
+    given-names: Nathan Aldyth Prananta
+    affiliation: "Sunway University"
+version: 0.1.0
+date-released: "2026-11-09"
+abstract: >
+  LOKI is a research prototype and open-source desktop automation system
+  for macOS that uses native accessibility trees as the primary observation
+  layer and locally-running large language models for multi-agent
+  orchestration. Users describe tasks in natural language, and LOKI plans
+  and executes them across browsers and native applications. Developed as
+  a Final Year Project at Sunway University.

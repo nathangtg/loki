@@ -1,0 +1,60 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Swift
+.build/
+.swiftpm/
+xcuserdata/
+DerivedData/
+
+# Secrets and local configuration (keep .env.example)
+.env
+.env.local
+.env.*.local
+orchestration/.env
+
+# Logs
+*.log
+
+# Orchestration runtime state and downloaded model weights
+orchestration/data/*
+!orchestration/data/.gitkeep
+orchestration/weights/
+orchestration/.cache/
+orchestration/screenshots/
+
+# Downloaded LLM weights (see `make llm`)
+/models/
+
+# Fine-tuning workspace (kept locally, not published)
+/deep_learning/
+
+# Local research notes, design docs and recorded experiment data (not published)
+/research/
+/docs/
+/SKILLS_DESIGN.md
+/DEMO.md
+/orchestration/STT_SETUP.md

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "model": {
+    "id": "mlx-community/Kokoro-82M-4bit",
+    "revision": "e4468a460f6f70b9125a003e0adb1ab7d4904bbd",
+    "variant": "4-bit",
+    "quantization": {
+      "bits": 4,
+      "group_size": 64
+    },
+    "license": "Apache-2.0",
+    "source": "https://huggingface.co/mlx-community/Kokoro-82M-4bit"
+  },
+  "default_voice": {
+    "id": "af_heart",
+    "language_code": "a",
+    "path": "voices/af_heart.safetensors"
+  },
+  "total_bytes": 283273776,
+  "files": [
+    {
+      "path": "config.json",
+      "size_bytes": 2412,
+      "sha256": "a7ca69f4c4cfcfc030b994a0b33dbc69d209d05c800a74657e0346d522f4fd46",
+      "role": "config"
+    },
+    {
+      "path": "kokoro-v1_0.safetensors",
+      "size_bytes": 282749025,
+      "sha256": "5a5cb3d87478f2e74dfca208ee52209ccfce024095e137097fd276026506e45f",
+      "role": "weights"
+    },
+    {
+      "path": "voices/af_heart.safetensors",
+      "size_bytes": 522339,
+      "sha256": "4e40b08984cd84a86b4d07960939bd85bb6b3747dd747b7de48dca3aaeab37ca",
+      "role": "voice"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+[project]
+name = "orchestration"
+version = "0.1.0"
+description = "LOKI orchestration server: LangGraph agent, macOS skills, local LLM, speech I/O"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+    "google-crc32c>=1.5.0",
+    "huggingface-hub>=1.13.0",
+    "langchain-core>=1.0.0",
+    "langgraph==1.2.12",
+    "llama-cpp-python>=0.3.8",
+    "llmlingua>=0.2.2",
+    "misaki[en]==0.9.4",
+    "mlx-audio==0.5.4",
+    "moonshine-voice==0.1.5",
+    "mss>=10.2.0",
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "playwright>=1.59.0",
+    "pyautogui>=0.9.54",
+    "pyobjc-framework-ApplicationServices>=11.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=11.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=11.0; sys_platform == 'darwin'",
+    "python-dotenv>=1.1.1",
+    "qdrant-client>=1.14.0",
+    "requests>=2.31.0",
+    "scipy>=1.11",
+    "sentence-transformers==5.6.0",
+    "en-core-web-sm==3.8.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"server.py" = ["E402"]
+"scripts/*.py" = ["E402"]

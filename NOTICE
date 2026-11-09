@@ -1,0 +1,47 @@
+LOKI
+Copyright (c) 2026 Nathan Aldyth Prananta G.
+
+LOKI is licensed under the Apache License, Version 2.0 (see LICENSE). It was
+developed as a Final Year Project at Sunway University, Malaysia.
+
+Third-party software
+--------------------
+LOKI depends on the packages below. Each keeps its own licence. Licences were
+read from the package metadata of the versions pinned in orchestration/uv.lock;
+check the upstream project if you redistribute.
+
+| Component              | Licence      | Used for                          |
+|:-----------------------|:-------------|:----------------------------------|
+| LangGraph              | MIT          | Agent graph                       |
+| langchain-core         | MIT          | Tool interface                    |
+| llama-cpp-python       | MIT          | Local LLM inference               |
+| mlx-lm (optional)      | MIT          | Alternative LLM backend           |
+| mlx-audio              | MIT          | Kokoro TTS runtime                |
+| Moonshine Voice        | MIT          | Speech-to-text                    |
+| misaki, spaCy          | Apache-2.0, MIT | TTS text processing            |
+| LLMLingua              | MIT          | Prompt compression                |
+| sentence-transformers  | Apache-2.0   | Embeddings                        |
+| Qdrant client          | Apache-2.0   | Local vector store                |
+| Playwright             | Apache-2.0   | Browser automation                |
+| PyObjC                 | MIT          | macOS Accessibility and Quartz    |
+| PyAutoGUI              | BSD-3-Clause | Input synthesis                   |
+| mss                    | MIT          | Screen capture                    |
+| NumPy, SciPy           | BSD-3-Clause | Signal processing                 |
+| Pillow                 | MIT-CMU      | Image handling                    |
+| python-dotenv          | BSD-3-Clause | Configuration                     |
+| requests               | Apache-2.0   | HTTP client                       |
+| huggingface-hub        | Apache-2.0   | Model download                    |
+| google-crc32c          | Apache-2.0   | Model checksum verification       |
+| PyTorch, Transformers  | Apache-2.0   | Pulled in by sentence-transformers|
+
+Model weights¡
+-------------
+Weights are not distributed with this repository. `make models` downloads them
+from their original sources, and you accept each licence when you do.
+
+| Model                       | Licence               | Source                                          |
+|:----------------------------|:----------------------|:------------------------------------------------|
+| Gemma 4 (E2B GGUF)          | Gemma Terms of Use    | https://ai.google.dev/gemma/terms               |
+| EmbeddingGemma-300M         | Gemma Terms of Use    | https://huggingface.co/google/embeddinggemma-300m |
+| Kokoro-82M (4-bit MLX)      | Apache-2.0            | https://huggingface.co/mlx-community/Kokoro-82M-4bit |
+| Moonshine (English)         | MIT                   | https://github.com/usefulsensors/moonshine       |
