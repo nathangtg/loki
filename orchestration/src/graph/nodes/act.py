@@ -18,6 +18,25 @@ LOGGER = logging.getLogger(__name__)
 
 _SHORTCUTS_CACHE: dict[str, str] = {}
 
+ACT_NODE_HANDLERS: frozenset[str] = frozenset(
+    {
+        "navigate",
+        "click",
+        "read_page",
+        "web_search",
+        "read_url",
+        "write_content",
+        "type_text",
+        "key_combo",
+        "open_app",
+        "wait",
+        "scroll",
+        "ask_user",
+        "done",
+        "fail",
+    }
+)
+
 
 def _resolve_locator(index_str: str, locator_map: dict[str, Any] | None) -> str | None:
     if not locator_map:
@@ -87,8 +106,6 @@ def _human_label(action: str, decision: dict[str, Any], screen_elements: str = "
         if sel:
             return f"Typing {label} into {resolved_sel}"
         return f"Typing {label}"
-    if action == "type_content":
-        return f"Writing {decision.get('description', 'content')[:40]}"
     if action == "key_combo":
         return f"Pressing {decision.get('combo', 'keys')}"
     if action == "open_app":
@@ -295,13 +312,6 @@ def _generate_content(state: LokiState, description: str) -> str:
     return agent.generate(description)
 
 
-def _handle_type_content(decision: dict[str, Any], state: LokiState, nt: dict[str, Any]) -> str:
-    desc = decision.get("description", "")
-    text = _generate_content(state, desc)
-    LOGGER.info("Generated content (%d chars): %s…", len(text), text[:80])
-    return nt["type"]._run(text)
-
-
 def _derive_title(state: LokiState, description: str) -> str:
     source = description or state.get("goal", "") or "Loki note"
     title = re.sub(r"\s+", " ", source).strip().strip(".")
@@ -493,8 +503,6 @@ def act_node(state: LokiState) -> dict[str, Any]:
             result = _handle_write_content(decision, state, nt)
         elif action == "type_text":
             result = _handle_type_text(decision, state, bt, nt)
-        elif action == "type_content":
-            result = _handle_type_content(decision, state, nt)
         elif action == "key_combo":
             result = _handle_key_combo(decision, state, nt)
         elif action == "open_app":

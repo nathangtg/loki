@@ -14,7 +14,9 @@ string    ::= "\"" ( [^"\\] | "\\" ["\\bfnrt/] )* "\""
 bool      ::= "true" | "false"
 """
 
-ACTION_GRAMMAR = _COMMON + r"""
+ACTION_GRAMMAR = (
+    _COMMON
+    + r"""
 root         ::= ws action ws
 action       ::= navigate | click | type-text | key-combo | read-page | scroll | open-app | web-search | read-url | write-content | done | fail
 navigate     ::= "{\"action\":\"navigate\",\"url\":" string "}"
@@ -30,8 +32,20 @@ write-content ::= "{\"action\":\"write_content\",\"destination\":" string ",\"de
 done         ::= "{\"action\":\"done\",\"summary\":" string "}"
 fail         ::= "{\"action\":\"fail\",\"reason\":" string "}"
 """
+)
 
-RESEARCH_GRAMMAR = _COMMON + r"""
+_ACTION_NAME_RE = re.compile(r'\\"action\\":\\"(\w+)\\"')
+
+
+def parse_action_types(grammar_text: str) -> frozenset[str]:
+    return frozenset(_ACTION_NAME_RE.findall(grammar_text))
+
+
+ACTION_TYPES: frozenset[str] = parse_action_types(ACTION_GRAMMAR)
+
+RESEARCH_GRAMMAR = (
+    _COMMON
+    + r"""
 root       ::= ws action ws
 action     ::= web-search | read-url | done | fail
 web-search ::= "{\"action\":\"web_search\",\"query\":" string "}"
@@ -39,13 +53,19 @@ read-url   ::= "{\"action\":\"read_url\",\"url\":" string "}"
 done       ::= "{\"action\":\"done\",\"summary\":" string "}"
 fail       ::= "{\"action\":\"fail\",\"reason\":" string "}"
 """
+)
 
-NAVIGATE_ONLY_GRAMMAR = _COMMON + r"""
+NAVIGATE_ONLY_GRAMMAR = (
+    _COMMON
+    + r"""
 root       ::= ws navigate ws
 navigate   ::= "{\"action\":\"navigate\",\"url\":" string "}"
 """
+)
 
-TYPE_OR_CLICK_GRAMMAR = _COMMON + r"""
+TYPE_OR_CLICK_GRAMMAR = (
+    _COMMON
+    + r"""
 root         ::= ws action ws
 action       ::= click | type-text | key-combo | read-page | web-search | read-url | write-content | done | fail
 click        ::= "{\"action\":\"click\",\"target\":" string "}"
@@ -58,8 +78,11 @@ write-content ::= "{\"action\":\"write_content\",\"destination\":" string ",\"de
 done         ::= "{\"action\":\"done\",\"summary\":" string "}"
 fail         ::= "{\"action\":\"fail\",\"reason\":" string "}"
 """
+)
 
-CLICK_OR_SCROLL_GRAMMAR = _COMMON + r"""
+CLICK_OR_SCROLL_GRAMMAR = (
+    _COMMON
+    + r"""
 root       ::= ws action ws
 action     ::= click | scroll | read-page | web-search | read-url | done | fail
 click      ::= "{\"action\":\"click\",\"target\":" string "}"
@@ -70,34 +93,49 @@ read-url   ::= "{\"action\":\"read_url\",\"url\":" string "}"
 done       ::= "{\"action\":\"done\",\"summary\":" string "}"
 fail       ::= "{\"action\":\"fail\",\"reason\":" string "}"
 """
+)
 
-OPEN_APP_ONLY_GRAMMAR = _COMMON + r"""
+OPEN_APP_ONLY_GRAMMAR = (
+    _COMMON
+    + r"""
 root       ::= ws action ws
 action     ::= open-app | done | fail
 open-app   ::= "{\"action\":\"open_app\",\"name\":" string "}"
 done       ::= "{\"action\":\"done\",\"summary\":" string "}"
 fail       ::= "{\"action\":\"fail\",\"reason\":" string "}"
 """
+)
 
-PLAN_GRAMMAR = _COMMON + r"""
+PLAN_GRAMMAR = (
+    _COMMON
+    + r"""
 root       ::= ws (chat | automation) ws
 chat       ::= "{\"mode\":\"chat\",\"reply\":" string "}"
 automation ::= "{\"mode\":\"automation\",\"steps\":[" ws step-list ws "]}"
 step-list  ::= string (ws "," ws string)*
 """
+)
 
-AUTOMATION_STEPS_GRAMMAR = _COMMON + r"""
+AUTOMATION_STEPS_GRAMMAR = (
+    _COMMON
+    + r"""
 root       ::= ws "{\"steps\":[" ws step-list ws "]}" ws
 step-list  ::= string (ws "," ws string)*
 """
+)
 
-REFLECT_GRAMMAR = _COMMON + r"""
+REFLECT_GRAMMAR = (
+    _COMMON
+    + r"""
 root        ::= ws "{" ws "\"step_complete\":" ws bool ws "," ws "\"goal_complete\":" ws bool ws "," ws "\"adjust\":" ws adjust-val ws "," ws "\"new_steps\":[" ws step-list? ws "]" ws "," ws "\"reasoning\":" ws string ws "}" ws
 adjust-val  ::= "\"none\"" | "\"insert\"" | "\"replace\"" | "\"skip\""
 step-list   ::= string (ws "," ws string)*
 """
+)
 
-GENERIC_JSON_OBJECT_GRAMMAR = _COMMON + r"""
+GENERIC_JSON_OBJECT_GRAMMAR = (
+    _COMMON
+    + r"""
 root   ::= ws object ws
 object ::= "{" ws (pair (ws "," ws pair)*)? ws "}"
 pair   ::= string ws ":" ws value
@@ -105,12 +143,16 @@ value  ::= object | array | string | number | bool | "null"
 array  ::= "[" ws (value (ws "," ws value)*)? ws "]"
 number ::= "-"? digits ("." digits)?
 """
+)
 
-SKILL_ROUTE_GRAMMAR = _COMMON + r"""
+SKILL_ROUTE_GRAMMAR = (
+    _COMMON
+    + r"""
 root   ::= ws "{" ws "\"skill\":" ws string ws "," ws "\"intent\":" ws string ws "," ws "\"params\":" ws object ws "}" ws
 object ::= "{" ws (pair (ws "," ws pair)*)? ws "}"
 pair   ::= string ws ":" ws string
 """
+)
 
 
 def build_skill_route_grammar_text(candidates: Optional[Iterable[object]] = None) -> str:
@@ -192,15 +234,19 @@ def _constrain_index_grammar(grammar_text: str, valid_indices: tuple[str, ...]) 
     if not valid_indices:
         return grammar_text
     idx_rule = " | ".join(f'"\\"{idx}\\""' for idx in valid_indices)
-    updated = grammar_text.replace(
-        'click      ::= "{\\"action\\":\\"click\\",\\"target\\":" string "}"',
-        'click      ::= "{\\"action\\":\\"click\\",\\"target\\":" idx-token "}"',
-    ).replace(
-        'click        ::= "{\\"action\\":\\"click\\",\\"target\\":" string "}"',
-        'click        ::= "{\\"action\\":\\"click\\",\\"target\\":" idx-token "}"',
-    ).replace(
-        'type-text    ::= "{\\"action\\":\\"type_text\\",\\"selector\\":" string ",\\"text\\":" string "}"',
-        'type-text    ::= "{\\"action\\":\\"type_text\\",\\"selector\\":" idx-token ",\\"text\\":" string "}"',
+    updated = (
+        grammar_text.replace(
+            'click      ::= "{\\"action\\":\\"click\\",\\"target\\":" string "}"',
+            'click      ::= "{\\"action\\":\\"click\\",\\"target\\":" idx-token "}"',
+        )
+        .replace(
+            'click        ::= "{\\"action\\":\\"click\\",\\"target\\":" string "}"',
+            'click        ::= "{\\"action\\":\\"click\\",\\"target\\":" idx-token "}"',
+        )
+        .replace(
+            'type-text    ::= "{\\"action\\":\\"type_text\\",\\"selector\\":" string ",\\"text\\":" string "}"',
+            'type-text    ::= "{\\"action\\":\\"type_text\\",\\"selector\\":" idx-token ",\\"text\\":" string "}"',
+        )
     )
     if "idx-token" in updated:
         updated += f"\nidx-token  ::= {idx_rule}\n"
@@ -212,10 +258,7 @@ def _names_installed_app(step: str, installed_apps: Optional[Iterable[str]]) -> 
     if not match or not installed_apps:
         return False
     target = match.group(1).lower()
-    return any(
-        target == (a[:-4] if a.lower().endswith(".app") else a).strip().lower()
-        for a in installed_apps
-    )
+    return any(target == (a[:-4] if a.lower().endswith(".app") else a).strip().lower() for a in installed_apps)
 
 
 def grammar_for_step(

@@ -5,7 +5,13 @@ from collections import Counter
 from typing import Any
 from urllib.parse import urlparse
 
-from src.graph.config import MAX_TURNS, PROMPT_COMPRESSION_ENABLED, TERSE_SYSTEM_ENABLED, LokiState
+from src.graph.config import (
+    CONSTRAINED_DECODING,
+    MAX_TURNS,
+    PROMPT_COMPRESSION_ENABLED,
+    TERSE_SYSTEM_ENABLED,
+    LokiState,
+)
 from src.graph.grammars import extract_element_indices, grammar_for_step
 from src.graph.history import is_summary_entry, summarize_if_needed
 from src.graph.llm import call_llm, extract_json
@@ -232,11 +238,13 @@ def reason_node(state: LokiState) -> dict[str, Any]:
     )
 
     valid_indices = extract_element_indices(elements)
-    grammar = grammar_for_step(
-        current_step,
-        state.get("installed_apps"),
-        valid_indices=valid_indices or None,
-    )
+    grammar = None
+    if CONSTRAINED_DECODING:
+        grammar = grammar_for_step(
+            current_step,
+            state.get("installed_apps"),
+            valid_indices=valid_indices or None,
+        )
     try:
         raw = call_llm(
             system_prompt,

@@ -30,6 +30,8 @@ USE_MLOCK = os.getenv("LOKI_MLOCK", "0") in ("1", "true", "True")
 PROMPT_COMPRESSION_ENABLED = os.getenv("LOKI_PROMPT_COMPRESSION", "0") in ("1", "true", "True")
 TERSE_SYSTEM_ENABLED = os.getenv("LOKI_TERSE_SYSTEM", "0") in ("1", "true", "True")
 
+CONSTRAINED_DECODING = os.getenv("LOKI_CONSTRAINED_DECODING", "1").strip().lower() in ("1", "true", "yes", "on")
+
 MAX_TURNS = 25
 
 
