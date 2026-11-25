@@ -19,6 +19,29 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger("loki.server")
 
+
+def _env_int(name: str, default: int) -> int:
+    """Read a positive int from the environment, falling back with a warning."""
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        LOGGER.warning("%s=%r is not an integer, using default %d", name, raw, default)
+        return default
+    if value <= 0:
+        LOGGER.warning("%s=%r must be positive, using default %d", name, raw, default)
+        return default
+    return value
+
+
+JOB_TTL_SECONDS = _env_int("LOKI_JOB_TTL_SECONDS", 3600)
+MAX_RETAINED_JOBS = _env_int("LOKI_MAX_RETAINED_JOBS", 200)
+MAX_STEPS_PER_JOB = _env_int("LOKI_MAX_STEPS_PER_JOB", 200)
+MAX_MESSAGES_PER_JOB = _env_int("LOKI_MAX_MESSAGES_PER_JOB", 200)
+JOB_SWEEP_INTERVAL_SECONDS = _env_int("LOKI_JOB_SWEEP_INTERVAL_SECONDS", 60)
+
 pipeline_lock = threading.Lock()
 
 jobs: dict[str, dict] = {}
@@ -73,9 +96,7 @@ def get_system_tts_adapter() -> MacOSSystemSpeechAdapter:
                 try:
                     rate = int(os.getenv("LOKI_SYSTEM_TTS_RATE", "185"))
                 except ValueError:
-                    raise TTSValidationError(
-                        "LOKI_SYSTEM_TTS_RATE must be an integer"
-                    ) from None
+                    raise TTSValidationError("LOKI_SYSTEM_TTS_RATE must be an integer") from None
                 _system_tts_adapter = MacOSSystemSpeechAdapter(voice=voice, rate=rate)
     return _system_tts_adapter
 

@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 import urllib.parse
 import uuid
 from http.server import BaseHTTPRequestHandler
@@ -12,18 +13,36 @@ from typing import Any
 
 from src.server.config import (
     LOGGER,
+    MAX_MESSAGES_PER_JOB,
     get_stt_engine,
     get_voice_manager,
+    job_done_events,
+    job_events,
     jobs,
     jobs_lock,
-    job_events,
-    job_done_events,
 )
+from src.server.job_store import append_bounded, evict_expired_jobs
 from src.server.pipeline import run_pipeline_async, stop_system_speech
 from src.voice.exceptions import VoiceError
 from src.voice.session import MAX_AUDIO_CHUNK_BYTES
 
 VOICE_LOGGER = LOGGER.getChild("voice.http")
+
+
+def _new_job(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "status": "running",
+        "result": None,
+        "steps": [],
+        "messages": messages,
+        "question": None,
+        "created_at": time.time(),
+        "finished_at": None,
+    }
+
+
+def _job_not_found(job_id: str) -> dict[str, str]:
+    return {"status": "error", "message": f"Job {job_id} not found or expired"}
 
 
 class LokiHandler(BaseHTTPRequestHandler):
@@ -60,7 +79,7 @@ class LokiHandler(BaseHTTPRequestHandler):
         prefix = "/voice/session/"
         if not path.startswith(prefix):
             return None
-        rest = path[len(prefix):]
+        rest = path[len(prefix) :]
         if "/" not in rest:
             return None
         session_id, action = rest.split("/", 1)
@@ -82,15 +101,10 @@ class LokiHandler(BaseHTTPRequestHandler):
             return
 
         job_id = str(uuid.uuid4())
+        evict_expired_jobs()
         with jobs_lock:
             job_done_events[job_id] = threading.Event()
-            jobs[job_id] = {
-                "status": "running",
-                "result": None,
-                "steps": [],
-                "messages": [],
-                "question": None,
-            }
+            jobs[job_id] = _new_job([])
 
         LOGGER.info("Accepted job %s: %s", job_id, command)
         client_tts = self.headers.get("X-Loki-Client-TTS", "").strip() in ("1", "true", "yes")
@@ -178,15 +192,10 @@ class LokiHandler(BaseHTTPRequestHandler):
                 return
 
             job_id = str(uuid.uuid4())
+            evict_expired_jobs()
             with jobs_lock:
                 job_done_events[job_id] = threading.Event()
-                jobs[job_id] = {
-                    "status": "running",
-                    "result": None,
-                    "steps": [],
-                    "messages": [{"type": "transcription", "content": command}],
-                    "question": None,
-                }
+                jobs[job_id] = _new_job([{"type": "transcription", "content": command}])
 
             LOGGER.info("Accepted audio job %s: %s", job_id, command[:80])
             client_tts = self.headers.get("X-Loki-Client-TTS", "").strip() in ("1", "true", "yes")
@@ -263,11 +272,15 @@ class LokiHandler(BaseHTTPRequestHandler):
         with jobs_lock:
             job = jobs.get(job_id)
             if job is None:
-                self._respond(404, {"status": "error", "message": "Job not found"})
+                self._respond(404, _job_not_found(job_id))
                 return
             job["answer"] = reply_text
             job["question"] = None
-            job["messages"].append({"type": "answer", "content": reply_text})
+            append_bounded(
+                job["messages"],
+                {"type": "answer", "content": reply_text},
+                MAX_MESSAGES_PER_JOB,
+            )
 
         event = job_events.get(job_id)
         if event:
@@ -458,8 +471,10 @@ class LokiHandler(BaseHTTPRequestHandler):
 
             with jobs_lock:
                 job = jobs.get(job_id)
+                if job is not None and job.get("status") in ("done", "error"):
+                    job_done_events.pop(job_id, None)
             if job is None:
-                self._respond(404, {"status": "error", "message": "Job not found"})
+                self._respond(404, _job_not_found(job_id))
             else:
                 safe = {k: v for k, v in job.items() if k != "answer"}
                 self._respond(200, safe)

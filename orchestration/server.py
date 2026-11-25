@@ -15,9 +15,10 @@ load_dotenv(_env_file, override=False)
 
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-from src.graph.config import LLM_BACKEND, MODEL_PATH, MLX_MODEL_PATH
+from src.graph.config import LLM_BACKEND, MLX_MODEL_PATH, MODEL_PATH
 from src.server.config import LOGGER
 from src.server.handler import LokiHandler
+from src.server.job_store import start_job_sweeper
 from src.server.warmup import warmup
 
 
@@ -28,7 +29,11 @@ def main():
 
     server = ThreadingHTTPServer(("127.0.0.1", args.port), LokiHandler)
     LOGGER.info("Loki orchestration server running on http://127.0.0.1:%d", args.port)
-    LOGGER.info("LLM backend: %s | model: %s", LLM_BACKEND, MLX_MODEL_PATH if LLM_BACKEND == "mlx" else MODEL_PATH or "(LOKI_MODEL_PATH not set)")
+    LOGGER.info(
+        "LLM backend: %s | model: %s",
+        LLM_BACKEND,
+        MLX_MODEL_PATH if LLM_BACKEND == "mlx" else MODEL_PATH or "(LOKI_MODEL_PATH not set)",
+    )
     LOGGER.info("POST /assist  — run pipeline")
     LOGGER.info("GET  /health  — health check")
     LOGGER.info("POST /voice/session                  — start a voice session")
@@ -39,6 +44,7 @@ def main():
     LOGGER.info("POST /voice/session/<id>/cancel       — cancel a session")
 
     threading.Thread(target=warmup, daemon=True, name="loki-warmup").start()
+    start_job_sweeper()
 
     try:
         server.serve_forever()

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import threading
+import time
 from typing import Any, Callable
 
 from src.server.config import (
     LOGGER,
+    MAX_MESSAGES_PER_JOB,
+    MAX_STEPS_PER_JOB,
     get_system_tts_adapter,
     job_done_events,
     job_events,
@@ -12,6 +15,7 @@ from src.server.config import (
     jobs_lock,
     pipeline_lock,
 )
+from src.server.job_store import append_bounded
 
 
 def _speak_system_async(text: str, session_id: str, goal: str = "") -> None:
@@ -76,23 +80,27 @@ def run_pipeline_async(
         with jobs_lock:
             job = jobs.get(job_id)
             if job is not None:
-                job["steps"].append(
+                append_bounded(
+                    job["steps"],
                     {
                         "action": action,
                         "target": target[:80],
                         "result": result[:120],
-                    }
+                    },
+                    MAX_STEPS_PER_JOB,
                 )
 
     def _on_message(msg_type: str, content: str) -> None:
         with jobs_lock:
             job = jobs.get(job_id)
             if job is not None:
-                job["messages"].append(
+                append_bounded(
+                    job["messages"],
                     {
                         "type": msg_type,
                         "content": content,
-                    }
+                    },
+                    MAX_MESSAGES_PER_JOB,
                 )
 
     def _ask_user(question: str) -> str:
@@ -103,7 +111,11 @@ def run_pipeline_async(
             job = jobs.get(job_id)
             if job is not None:
                 job["question"] = question
-                job["messages"].append({"type": "question", "content": question})
+                append_bounded(
+                    job["messages"],
+                    {"type": "question", "content": question},
+                    MAX_MESSAGES_PER_JOB,
+                )
             done_ev = job_done_events.get(job_id)
             if done_ev is not None:
                 done_ev.set()
@@ -111,15 +123,21 @@ def run_pipeline_async(
         LOGGER.info("Pipeline asking user: %s", question)
         if not client_handles_tts:
             _speak_system_async(question, job_id)
-        event.wait(timeout=120)
+        answered = event.wait(timeout=120)
         if not client_handles_tts:
             stop_system_speech()
 
         with jobs_lock:
             job = jobs.get(job_id)
             answer = job.get("answer", "") if job else ""
+            if job and not answered:
+                job["question"] = None
             if job and answer:
-                job["messages"].append({"type": "answer", "content": answer})
+                append_bounded(
+                    job["messages"],
+                    {"type": "answer", "content": answer},
+                    MAX_MESSAGES_PER_JOB,
+                )
 
         job_events.pop(job_id, None)
         LOGGER.info("User answered: %s", answer[:60])
@@ -143,6 +161,7 @@ def run_pipeline_async(
                     result["message"] = result["spoken_message"]
             with jobs_lock:
                 jobs[job_id]["status"] = "done"
+                jobs[job_id]["finished_at"] = time.time()
                 jobs[job_id]["result"] = result
                 done_ev = job_done_events.get(job_id)
                 if done_ev is not None:
@@ -155,6 +174,7 @@ def run_pipeline_async(
             LOGGER.exception("Pipeline failed for job %s", job_id)
             with jobs_lock:
                 jobs[job_id]["status"] = "error"
+                jobs[job_id]["finished_at"] = time.time()
                 jobs[job_id]["result"] = {"status": "error", "message": str(exc)}
                 done_ev = job_done_events.get(job_id)
                 if done_ev is not None:
