@@ -12,7 +12,7 @@ struct BubbleStyle: VectorArithmetic, Equatable {
 
     // MARK: Slots
 
-    private static let colorBase = 0           // five RGB triples: 0..<15
+    private static let colorBase = 0  // five RGB triples: 0..<15
     private static let energy = 15
     private static let flow = 16
     private static let glow = 17
@@ -81,8 +81,12 @@ struct BubbleStyle: VectorArithmetic, Equatable {
 
     static func += (lhs: inout BubbleStyle, rhs: BubbleStyle) { lhs.v += rhs.v }
     static func -= (lhs: inout BubbleStyle, rhs: BubbleStyle) { lhs.v -= rhs.v }
-    static func + (lhs: BubbleStyle, rhs: BubbleStyle) -> BubbleStyle { BubbleStyle(v: lhs.v + rhs.v) }
-    static func - (lhs: BubbleStyle, rhs: BubbleStyle) -> BubbleStyle { BubbleStyle(v: lhs.v - rhs.v) }
+    static func + (lhs: BubbleStyle, rhs: BubbleStyle) -> BubbleStyle {
+        BubbleStyle(v: lhs.v + rhs.v)
+    }
+    static func - (lhs: BubbleStyle, rhs: BubbleStyle) -> BubbleStyle {
+        BubbleStyle(v: lhs.v - rhs.v)
+    }
 
     mutating func scale(by rhs: Double) { v *= rhs }
 
@@ -100,58 +104,84 @@ extension BubbleStyle {
         switch phase {
         case .idle:
             return make(
-                fields: (P.indigo, P.electricBlue, P.violet), accent: P.paleBlue, rim: P.electricBlue,
-                energy: 0.16, flow: 0.35, glow: 0.34, core: 0.22, ripple: 0, swirl: 0.08, sheen: 0.75,
-                drift: 0, pulse: 0.035, pulseFast: 0, brightness: 0.80, audioGain: 0, accentMix: 0.25)
+                fields: (P.indigo, P.electricBlue, P.violet), accent: P.paleBlue,
+                rim: P.electricBlue,
+                energy: 0.16, flow: 0.35, glow: 0.34, core: 0.22, ripple: 0, swirl: 0.08,
+                sheen: 0.75,
+                drift: 0, pulse: 0.035, pulseFast: 0, brightness: 0.80, audioGain: 0,
+                accentMix: 0.25)
 
         case .listening:
             return make(
                 fields: (P.electricBlue, P.cyan, P.indigo), accent: P.cyan, rim: P.cyan,
-                energy: 0.28, flow: 0.50, glow: 0.62, core: 0.45, ripple: 1, swirl: 0.12, sheen: 0.90,
+                energy: 0.28, flow: 0.50, glow: 0.62, core: 0.45, ripple: 1, swirl: 0.12,
+                sheen: 0.90,
                 drift: 0, pulse: 0.03, pulseFast: 0, brightness: 1.0, audioGain: 1, accentMix: 0.30)
+
+        case .confirming:
+            return make(
+                fields: (P.electricBlue, P.cyan, P.indigo), accent: P.paleBlue, rim: P.paleBlue,
+                energy: 0.22, flow: 0.45, glow: 0.58, core: 0.50, ripple: 0.40, swirl: 0.10,
+                sheen: 0.90,
+                drift: 0, pulse: 0.05, pulseFast: 0, brightness: 1.0, audioGain: 0.6,
+                accentMix: 0.30)
 
         case .thinking:
             return make(
                 fields: (P.indigo, P.violet, P.electricBlue), accent: P.violet, rim: P.violet,
-                energy: 0.50, flow: 0.85, glow: 0.50, core: 0.80, ripple: 0, swirl: 1.0, sheen: 0.70,
-                drift: 0, pulse: 0.05, pulseFast: 0.02, brightness: 0.92, audioGain: 0, accentMix: 0.45)
+                energy: 0.50, flow: 0.85, glow: 0.50, core: 0.80, ripple: 0, swirl: 1.0,
+                sheen: 0.70,
+                drift: 0, pulse: 0.05, pulseFast: 0.02, brightness: 0.92, audioGain: 0,
+                accentMix: 0.45)
 
         case .executing:
             return make(
                 fields: (P.electricBlue, P.cyan, P.indigo), accent: P.cyan, rim: P.cyan,
-                energy: 0.20, flow: 0.50, glow: 0.66, core: 0.70, ripple: 0, swirl: 0.15, sheen: 0.85,
-                drift: 1, pulse: 0.02, pulseFast: 0.035, brightness: 1.0, audioGain: 0, accentMix: 0.35)
+                energy: 0.20, flow: 0.50, glow: 0.66, core: 0.70, ripple: 0, swirl: 0.15,
+                sheen: 0.85,
+                drift: 1, pulse: 0.02, pulseFast: 0.035, brightness: 1.0, audioGain: 0,
+                accentMix: 0.35)
 
         case .responding:
             return make(
                 fields: (P.electricBlue, P.cyan, P.violet), accent: P.magenta, rim: P.violet,
-                energy: 0.80, flow: 1.0, glow: 0.88, core: 0.66, ripple: 0.22, swirl: 0.55, sheen: 1.0,
-                drift: 0, pulse: 0.06, pulseFast: 0.02, brightness: 1.02, audioGain: 0.55, accentMix: 1.0)
+                energy: 0.80, flow: 1.0, glow: 0.88, core: 0.66, ripple: 0.22, swirl: 0.55,
+                sheen: 1.0,
+                drift: 0, pulse: 0.06, pulseFast: 0.02, brightness: 1.02, audioGain: 0.55,
+                accentMix: 1.0)
 
         case .awaitingReply:
             return make(
                 fields: (P.indigo, P.cyan, P.electricBlue), accent: P.paleBlue, rim: P.cyan,
-                energy: 0.20, flow: 0.45, glow: 0.50, core: 0.40, ripple: 0.55, swirl: 0.10, sheen: 0.85,
-                drift: 0, pulse: 0.06, pulseFast: 0, brightness: 0.95, audioGain: 0, accentMix: 0.20)
+                energy: 0.20, flow: 0.45, glow: 0.50, core: 0.40, ripple: 0.55, swirl: 0.10,
+                sheen: 0.85,
+                drift: 0, pulse: 0.06, pulseFast: 0, brightness: 0.95, audioGain: 0, accentMix: 0.20
+            )
 
         case .completed:
             return make(
                 fields: (P.cyan, P.mint, P.electricBlue), accent: P.mint, rim: P.mint,
-                energy: 0.15, flow: 0.40, glow: 0.80, core: 0.95, ripple: 0, swirl: 0.05, sheen: 1.0,
-                drift: 0, pulse: 0.04, pulseFast: 0, brightness: 1.05, audioGain: 0, accentMix: 0.30)
+                energy: 0.15, flow: 0.40, glow: 0.80, core: 0.95, ripple: 0, swirl: 0.05,
+                sheen: 1.0,
+                drift: 0, pulse: 0.04, pulseFast: 0, brightness: 1.05, audioGain: 0, accentMix: 0.30
+            )
 
         case .error:
             return make(
-                fields: (LokiRGB(0.90, 0.36, 0.34), P.violet, P.indigo), accent: P.ember, rim: P.ember,
-                energy: 0.12, flow: 0.30, glow: 0.45, core: 0.35, ripple: 0, swirl: 0.05, sheen: 0.60,
-                drift: 0, pulse: 0.03, pulseFast: 0, brightness: 0.82, audioGain: 0, accentMix: 0.40)
+                fields: (LokiRGB(0.90, 0.36, 0.34), P.violet, P.indigo), accent: P.ember,
+                rim: P.ember,
+                energy: 0.12, flow: 0.30, glow: 0.45, core: 0.35, ripple: 0, swirl: 0.05,
+                sheen: 0.60,
+                drift: 0, pulse: 0.03, pulseFast: 0, brightness: 0.82, audioGain: 0, accentMix: 0.40
+            )
         }
     }
 
     /// Adapts a phase preset to where the bubble is shown and to transient emphasis.
     func adapted(mini: Bool, emphasis: Double) -> BubbleStyle {
         var s = self
-        s.v[Self.bodyRatio] = mini ? LokiDesign.Bubble.bodyRatioMini : LokiDesign.Bubble.bodyRatioFull
+        s.v[Self.bodyRatio] =
+            mini ? LokiDesign.Bubble.bodyRatioMini : LokiDesign.Bubble.bodyRatioFull
         if mini {
             s.v[Self.ripple] = 0
             s.v[Self.glow] *= 0.8

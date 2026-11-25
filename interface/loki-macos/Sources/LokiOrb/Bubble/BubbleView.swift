@@ -20,10 +20,21 @@ struct BubbleView: View {
             burstStart: model.burstStart,
             interval: model.phase.renderInterval,
             // Reduce Motion freezes the shapes; the timeline only runs to follow a real microphone.
-            paused: !model.isRendering || (reduce && model.phase != .listening),
+            paused: !model.isRendering
+                || (reduce && model.phase != .listening && model.phase != .confirming),
             frozen: reduce
         )
-        .animation(reduce ? LokiDesign.Motion.reduced : LokiDesign.Motion.stateChange, value: model.phase)
+        .animation(
+            reduce ? LokiDesign.Motion.reduced : LokiDesign.Motion.stateChange, value: model.phase
+        )
+        .overlay(alignment: .topTrailing) {
+            if model.wakeListenerArmed && model.phase == .idle {
+                Circle()
+                    .fill(LokiDesign.Colors.tint(LokiDesign.Palette.cyan))
+                    .frame(width: mini ? 5 : 7, height: mini ? 5 : 7)
+                    .padding(mini ? 2 : LokiDesign.Bubble.compactFrame * 0.2)
+            }
+        }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -58,7 +69,8 @@ struct BubbleCanvas: View, Animatable {
                 }
 
                 var ctx = context
-                BubbleRenderer.draw(into: &ctx, size: size, style: style, time: t, level: level, burst: burst)
+                BubbleRenderer.draw(
+                    into: &ctx, size: size, style: style, time: t, level: level, burst: burst)
             }
         }
     }

@@ -38,31 +38,44 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(headerItem)
         menu.addItem(.separator())
 
-        menu.addItem(item(
-            "Start Listening", #selector(AppCommands.toggleListening(_:)), "mic",
-            key: "v", modifiers: [.command, .shift], target: commands
-        ))
-        menu.addItem(item(
-            "Open Conversation", #selector(AppCommands.toggleConversation(_:)), "text.bubble",
-            key: " ", modifiers: [.command, .shift], target: commands
-        ))
-        menu.addItem(item(
-            "Stop Speaking", #selector(AppCommands.stopSpeaking(_:)), "speaker.slash",
-            key: ".", target: commands
-        ))
+        menu.addItem(
+            item(
+                "Start Listening", #selector(AppCommands.toggleListening(_:)), "mic",
+                key: "v", modifiers: [.command, .shift], target: commands
+            ))
+        menu.addItem(
+            item(
+                "Open Conversation", #selector(AppCommands.toggleConversation(_:)), "text.bubble",
+                key: " ", modifiers: [.command, .shift], target: commands
+            ))
+        menu.addItem(
+            item(
+                "Stop Speaking", #selector(AppCommands.stopSpeaking(_:)), "speaker.slash",
+                key: ".", target: commands
+            ))
         menu.addItem(.separator())
 
-        menu.addItem(item("Hide Bubble", #selector(AppCommands.toggleBubble(_:)), "eye.slash", target: commands))
-        menu.addItem(item(
-            "Reset Orb Position", #selector(AppCommands.resetPosition(_:)), "arrow.counterclockwise",
-            target: commands
-        ))
+        menu.addItem(
+            item(
+                "Hide Bubble", #selector(AppCommands.toggleBubble(_:)), "eye.slash",
+                target: commands))
+        menu.addItem(
+            item(
+                "Reset Orb Position", #selector(AppCommands.resetPosition(_:)),
+                "arrow.counterclockwise",
+                target: commands
+            ))
         menu.addItem(.separator())
 
-        menu.addItem(item(
-            "Settings…", #selector(AppCommands.showSettings(_:)), "gearshape", key: ",", target: commands
-        ))
-        menu.addItem(item("About Loki", #selector(AppCommands.showAbout(_:)), "info.circle", target: commands))
+        menu.addItem(
+            item(
+                "Settings…", #selector(AppCommands.showSettings(_:)), "gearshape", key: ",",
+                target: commands
+            ))
+        menu.addItem(
+            item(
+                "About Loki", #selector(AppCommands.showAbout(_:)), "info.circle", target: commands)
+        )
         menu.addItem(.separator())
         menu.addItem(item("Quit Loki", #selector(NSApplication.terminate(_:)), nil, key: "q"))
         return menu
@@ -101,7 +114,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private func updateHeader() {
         headerItem.title = controller.statusLine
-        headerItem.image = Self.symbolImage(Self.menuBarSymbol(for: controller.phase), description: nil)
+        headerItem.image = Self.symbolImage(
+            Self.menuBarSymbol(for: controller.phase), description: nil)
     }
 
     private func updateIcon() {
@@ -117,6 +131,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         switch phase {
         case .idle: return "circle.circle"
         case .listening: return "waveform"
+        case .confirming: return "timer"
         case .thinking, .executing: return "circle.hexagongrid.fill"
         case .responding: return "sparkles"
         case .awaitingReply: return "bubble.left"
@@ -126,7 +141,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private static func symbolImage(_ name: String, description: String?) -> NSImage? {
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: description)
+        let image =
+            NSImage(systemSymbolName: name, accessibilityDescription: description)
             ?? NSImage(systemSymbolName: "circle", accessibilityDescription: description)
         image?.isTemplate = true
         return image

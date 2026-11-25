@@ -41,7 +41,13 @@ struct CompactBubbleView: View {
     var body: some View {
         let hovering = hover.isOn
         return VStack(spacing: 4) {
-            if controller.phase != .idle {
+            if controller.phase == .confirming {
+                StatusCaption(phase: controller.phase, text: controller.statusLine)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                GraceCancelButton(controller: controller)
+                    .keyboardShortcut(.cancelAction)
+                    .transition(.opacity)
+            } else if controller.phase != .idle {
                 StatusCaption(phase: controller.phase, text: controller.statusLine)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
@@ -49,12 +55,17 @@ struct CompactBubbleView: View {
             ZStack {
                 BubbleView(model: controller.bubble)
                     .matchedGeometryEffect(id: "bubble", in: bubbleSpace)
-                    .frame(width: LokiDesign.Bubble.compactFrame, height: LokiDesign.Bubble.compactFrame)
+                    .frame(
+                        width: LokiDesign.Bubble.compactFrame,
+                        height: LokiDesign.Bubble.compactFrame
+                    )
                     .contentShape(Circle().inset(by: LokiDesign.Bubble.compactFrame * 0.22))
                     .onTapGesture { controller.toggleVoice() }
                     .contextMenu {
                         Button("Open Conversation") { controller.setExpanded(true) }
-                        Button(controller.phase == .listening ? "Stop Listening" : "Start Listening") {
+                        Button(
+                            controller.phase == .listening ? "Stop Listening" : "Start Listening"
+                        ) {
                             controller.toggleVoice()
                         }
                         Divider()
@@ -62,13 +73,20 @@ struct CompactBubbleView: View {
                     }
                     // One VoiceOver button for the bubble. The hover button below stays a separate element.
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Loki")
+                    .accessibilityLabel(
+                        controller.wakeListenerArmed && controller.phase == .idle
+                            ? "Loki, wake listening is on" : "Loki"
+                    )
                     .accessibilityValue(controller.statusLine)
-                    .accessibilityHint("Starts or stops voice input. You can also drop text or files here to add them to your message.")
+                    .accessibilityHint(
+                        "Starts or stops voice input. You can also drop text or files here to add them to your message."
+                    )
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { controller.toggleVoice() }
                     .accessibilityAction(named: "Toggle voice input") { controller.toggleVoice() }
-                    .accessibilityAction(named: "Open conversation") { controller.setExpanded(true) }
+                    .accessibilityAction(named: "Open conversation") {
+                        controller.setExpanded(true)
+                    }
 
                 Button {
                     controller.setExpanded(true)
@@ -107,6 +125,39 @@ struct CompactBubbleView: View {
     }
 }
 
+/// Visible cancel control for the Grace Window. Shows the remaining seconds.
+struct GraceCancelButton: View {
+    @ObservedObject var controller: LokiController
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    var body: some View {
+        Button {
+            controller.cancelGraceWindow()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "xmark")
+                    .font(LokiDesign.Typography.symbolSmall)
+                Text("Cancel (\(max(1, controller.graceSecondsRemaining)))")
+                    .font(LokiDesign.Typography.captionStrong)
+            }
+            .foregroundColor(LokiDesign.Colors.textPrimary)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(
+                reduceTransparency
+                    ? AnyShapeStyle(Color(nsColor: .windowBackgroundColor))
+                    : AnyShapeStyle(.ultraThinMaterial),
+                in: Capsule()
+            )
+            .overlay(Capsule().stroke(LokiDesign.Colors.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("Cancel and don't send (Esc)")
+        .accessibilityLabel("Cancel sending")
+        .accessibilityHint("Stops listening and discards what was heard.")
+    }
+}
+
 /// Small glass capsule under/over the bubble. Pairs a glyph and text with the color so state is
 /// never conveyed by color alone.
 struct StatusCaption: View {
@@ -134,7 +185,9 @@ struct StatusCaption: View {
                 : AnyShapeStyle(.ultraThinMaterial),
             in: Capsule()
         )
-        .background(Capsule().fill(reduceTransparency ? Color.clear : LokiDesign.Colors.captionFill))
+        .background(
+            Capsule().fill(reduceTransparency ? Color.clear : LokiDesign.Colors.captionFill)
+        )
         .overlay(Capsule().stroke(LokiDesign.Colors.hairline, lineWidth: 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(text)

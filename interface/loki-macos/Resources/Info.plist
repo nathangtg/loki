@@ -31,7 +31,9 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Loki listens only after you start voice input, to turn your speech into a command.</string>
+	<string>Loki uses the microphone when you start voice input, and, if you turn on the optional "Hey Loki" wake word, to listen for that phrase. Wake word audio is processed on your Mac and stays on the device.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Loki uses speech recognition to detect the optional "Hey Loki" wake word. Recognition runs on your Mac and the audio stays on the device.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSServices</key>

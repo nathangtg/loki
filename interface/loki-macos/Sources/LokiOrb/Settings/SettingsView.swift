@@ -50,18 +50,61 @@ private struct GeneralSettingsTab: View {
     @ObservedObject var settings: LokiSettings
     @StateObject private var launchAtLogin = LaunchAtLogin()
 
+    /// The System Settings privacy pane to open when a permission was denied, else nil.
+    private static func privacyPaneURL(for reason: String) -> URL? {
+        let pane: String
+        if reason == WakeListener.microphoneDeniedReason {
+            pane = "Privacy_Microphone"
+        } else if reason == WakeListener.speechDeniedReason {
+            pane = "Privacy_SpeechRecognition"
+        } else {
+            return nil
+        }
+        return URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")
+    }
+
     var body: some View {
         Form {
             Section {
-                Toggle("Show the Loki bubble when the app starts", isOn: $settings.showBubbleAtLaunch)
-                Toggle("Play a sound when listening starts and stops", isOn: $settings.playListeningSounds)
-                Toggle("Open the conversation when Loki asks a question", isOn: $settings.openConversationForQuestions)
-                Toggle("Open on the display where the pointer is", isOn: $settings.summonOnActiveDisplay)
+                Toggle(
+                    "Show the Loki bubble when the app starts", isOn: $settings.showBubbleAtLaunch)
+                Toggle(
+                    "Play a sound when listening starts and stops",
+                    isOn: $settings.playListeningSounds)
+                Toggle(
+                    "Open the conversation when Loki asks a question",
+                    isOn: $settings.openConversationForQuestions)
+                Toggle(
+                    "Open on the display where the pointer is",
+                    isOn: $settings.summonOnActiveDisplay)
             } footer: {
-                Text("If the bubble is hidden, use the Loki icon in the menu bar or press ⌘⇧Space to bring it back. When the conversation stays closed, a question is shown on the bubble and kept in the conversation. With several displays, ⌘⇧Space and ⌘⇧V bring the bubble to the display you are working on, at the same relative position. Clicking the bubble never moves it.")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
+                Text(
+                    "If the bubble is hidden, use the Loki icon in the menu bar or press ⌘⇧Space to bring it back. When the conversation stays closed, a question is shown on the bubble and kept in the conversation. With several displays, ⌘⇧Space and ⌘⇧V bring the bubble to the display you are working on, at the same relative position. Clicking the bubble never moves it."
+                )
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.leading)
+            }
+            Section {
+                Toggle("Hey Loki", isOn: $settings.wakeWordEnabled)
+                if let reason = settings.wakeWordFailureReason {
+                    Text(reason)
+                        .font(.callout)
+                        .foregroundColor(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let url = Self.privacyPaneURL(for: reason) {
+                        Button("Open Privacy Settings") { NSWorkspace.shared.open(url) }
+                    }
+                }
+            } header: {
+                Text("Voice")
+            } footer: {
+                Text(
+                    "Loki listens for \"Hey Loki\" on this Mac while it is idle. Audio is processed on device, never saved and never sent anywhere until you say a command."
+                )
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.leading)
             }
             Section {
                 Picker("Conversation appearance", selection: $settings.appearance) {
@@ -72,16 +115,21 @@ private struct GeneralSettingsTab: View {
             } header: {
                 Text("Appearance")
             } footer: {
-                Text("Match System follows Light and Dark in System Settings. The bubble itself looks the same in both.")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
+                Text(
+                    "Match System follows Light and Dark in System Settings. The bubble itself looks the same in both."
+                )
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.leading)
             }
             Section {
-                Toggle("Launch Loki at login", isOn: Binding(
-                    get: { launchAtLogin.isOn },
-                    set: { launchAtLogin.setEnabled($0) }
-                ))
+                Toggle(
+                    "Launch Loki at login",
+                    isOn: Binding(
+                        get: { launchAtLogin.isOn },
+                        set: { launchAtLogin.setEnabled($0) }
+                    )
+                )
                 .disabled(!launchAtLogin.isAvailable)
                 if launchAtLogin.state == .requiresApproval {
                     HStack {
@@ -100,18 +148,22 @@ private struct GeneralSettingsTab: View {
             } header: {
                 Text("Startup")
             } footer: {
-                Text(launchAtLogin.isAvailable
-                    ? "macOS keeps this setting. You can also change it in System Settings > General > Login Items."
-                    : "Available when running Loki.app")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(
+                    launchAtLogin.isAvailable
+                        ? "macOS keeps this setting. You can also change it in System Settings > General > Login Items."
+                        : "Available when running Loki.app"
+                )
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .formStyle(.grouped)
         .onAppear { launchAtLogin.refresh() }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
             launchAtLogin.refresh()
         }
     }
@@ -125,7 +177,8 @@ private struct AccessibilitySettingsTab: View {
     var body: some View {
         Form {
             Section {
-                Picker("When VoiceOver is running", selection: $settings.spokenRepliesWithVoiceOver) {
+                Picker("When VoiceOver is running", selection: $settings.spokenRepliesWithVoiceOver)
+                {
                     ForEach(VoiceOverSpeechPolicy.allCases) { policy in
                         Text(policy.title).tag(policy)
                     }
@@ -134,16 +187,20 @@ private struct AccessibilitySettingsTab: View {
             } header: {
                 Text("Spoken replies")
             } footer: {
-                Text("By default Loki stays quiet while VoiceOver is running, so two voices never talk at once. VoiceOver announces each reply, question and error instead, and the full text stays in the conversation. Choose Use Loki voice as well to hear both. Without VoiceOver, Loki speaks replies to voice commands as usual.")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
+                Text(
+                    "By default Loki stays quiet while VoiceOver is running, so two voices never talk at once. VoiceOver announces each reply, question and error instead, and the full text stays in the conversation. Choose Use Loki voice as well to hear both. Without VoiceOver, Loki speaks replies to voice commands as usual."
+                )
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.leading)
             }
             Section {
-                Text("Loki follows Reduce Motion, Increase Contrast, Reduce Transparency and Differentiate Without Color from System Settings > Accessibility > Display. There is nothing to configure here for those.")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
+                Text(
+                    "Loki follows Reduce Motion, Increase Contrast, Reduce Transparency and Differentiate Without Color from System Settings > Accessibility > Display. There is nothing to configure here for those."
+                )
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.leading)
             } header: {
                 Text("Display")
             }
@@ -160,8 +217,11 @@ private struct ShortcutsSettingsTab: View {
     var body: some View {
         Form {
             Section("Global shortcuts") {
-                ShortcutRow(glyphs: "⌘⇧V", title: "Start or stop listening", status: hotkeys.voiceStatus)
-                ShortcutRow(glyphs: "⌘⇧Space", title: "Open or close the conversation", status: hotkeys.textStatus)
+                ShortcutRow(
+                    glyphs: "⌘⇧V", title: "Start or stop listening", status: hotkeys.voiceStatus)
+                ShortcutRow(
+                    glyphs: "⌘⇧Space", title: "Open or close the conversation",
+                    status: hotkeys.textStatus)
             }
             Section("While the conversation is open") {
                 InAppShortcutRow(glyphs: "⎋", title: "Close the conversation")
@@ -186,7 +246,8 @@ private struct ShortcutRow: View {
         case .active: return "Active"
         case .notRegistered: return "Not registered yet"
         case .inUse: return "Unavailable: another app already uses this shortcut"
-        case .failed(let code): return "Unavailable: the system refused this shortcut (error \(code))"
+        case .failed(let code):
+            return "Unavailable: the system refused this shortcut (error \(code))"
         }
     }
 
@@ -197,9 +258,12 @@ private struct ShortcutRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                 HStack(spacing: 4) {
-                    Image(systemName: isActive ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundColor(isActive ? .green : .orange)
-                        .accessibilityHidden(true)
+                    Image(
+                        systemName: isActive
+                            ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                    )
+                    .foregroundColor(isActive ? .green : .orange)
+                    .accessibilityHidden(true)
                     Text(statusText)
                         .font(.callout)
                         .foregroundColor(.secondary)
@@ -257,7 +321,8 @@ private struct AboutSettingsTab: View {
     @StateObject private var check = ServerCheckModel()
 
     private var version: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? AboutPanel.version
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? AboutPanel.version
     }
 
     var body: some View {
@@ -272,10 +337,12 @@ private struct AboutSettingsTab: View {
                     statusView
                 }
             } footer: {
-                Text("Loki talks to the orchestration server on this address. Set LOKI_ORCHESTRATION_BASE to change it.")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
+                Text(
+                    "Loki talks to the orchestration server on this address. Set LOKI_ORCHESTRATION_BASE to change it."
+                )
+                .font(.callout)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.leading)
             }
         }
         .formStyle(.grouped)

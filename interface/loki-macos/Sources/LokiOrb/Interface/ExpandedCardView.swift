@@ -33,7 +33,9 @@ struct ExpandedCardView: View {
         .animation(LokiDesign.Motion.stateChange, value: controller.phase)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Loki conversation")
-        .accessibilityHint("Drop text or files here to add them to your message. Nothing is sent until you press Return.")
+        .accessibilityHint(
+            "Drop text or files here to add them to your message. Nothing is sent until you press Return."
+        )
     }
 }
 
@@ -41,15 +43,16 @@ extension ExpandedCardView {
     /// A soft gradient outline, or a solid line with Increase Contrast.
     fileprivate var cardStroke: AnyShapeStyle {
         if contrast == .increased { return AnyShapeStyle(LokiDesign.Colors.cardStrokeSolid) }
-        return AnyShapeStyle(LinearGradient(
-            colors: [
-                LokiDesign.Colors.cardStrokeLeading,
-                LokiDesign.Colors.cardStrokeMiddle,
-                LokiDesign.Colors.tint(controller.phase.tint, opacity: 0.25),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        ))
+        return AnyShapeStyle(
+            LinearGradient(
+                colors: [
+                    LokiDesign.Colors.cardStrokeLeading,
+                    LokiDesign.Colors.cardStrokeMiddle,
+                    LokiDesign.Colors.tint(controller.phase.tint, opacity: 0.25),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ))
     }
 }
 
@@ -73,13 +76,18 @@ private struct CardBackground: View {
                 Rectangle().fill(LokiDesign.Colors.cardWash)
             }
             RadialGradient(
-                colors: [phase.tint.color(opacity: scheme == .dark ? 0.20 : 0.12), phase.tint.color(opacity: 0)],
+                colors: [
+                    phase.tint.color(opacity: scheme == .dark ? 0.20 : 0.12),
+                    phase.tint.color(opacity: 0),
+                ],
                 center: .topLeading,
                 startRadius: 0,
                 endRadius: 320
             )
             RadialGradient(
-                colors: [LokiDesign.Palette.violet.color(opacity: scheme == .dark ? 0.08 : 0.05), .clear],
+                colors: [
+                    LokiDesign.Palette.violet.color(opacity: scheme == .dark ? 0.08 : 0.05), .clear,
+                ],
                 center: .bottomTrailing,
                 startRadius: 0,
                 endRadius: 280
@@ -101,9 +109,17 @@ private struct CardHeader: View {
                 .frame(width: LokiDesign.Bubble.miniFrame, height: LokiDesign.Bubble.miniFrame)
                 .contentShape(Circle())
                 .onTapGesture { controller.toggleVoice() }
-                .help(controller.phase == .listening ? "Stop listening (⌘⇧V)" : "Start listening (⌘⇧V)")
+                .help(
+                    controller.phase == .listening
+                        ? "Stop listening (⌘⇧V)" : "Start listening (⌘⇧V)"
+                )
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(controller.phase == .listening ? "Stop listening" : "Start listening")
+                .accessibilityLabel(
+                    controller.phase == .listening || controller.phase == .confirming
+                        ? "Stop listening"
+                        : (controller.wakeListenerArmed && controller.phase == .idle
+                            ? "Start listening, wake listening is on" : "Start listening")
+                )
                 .accessibilityValue(controller.statusLine)
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { controller.toggleVoice() }
@@ -132,6 +148,10 @@ private struct CardHeader: View {
             }
 
             Spacer(minLength: 0)
+
+            if controller.phase == .confirming {
+                GraceCancelButton(controller: controller)
+            }
 
             Menu {
                 Button("Settings…", action: controller.showSettings)
@@ -181,7 +201,9 @@ private struct HeaderButton: View {
                 .font(LokiDesign.Typography.symbolSmall)
                 .foregroundColor(LokiDesign.Colors.textSecondary)
                 .frame(width: 24, height: 24)
-                .background(Circle().fill(hovering ? LokiDesign.Colors.surfaceRaised : LokiDesign.Colors.surface))
+                .background(
+                    Circle().fill(
+                        hovering ? LokiDesign.Colors.surfaceRaised : LokiDesign.Colors.surface))
         }
         .buttonStyle(.plain)
         .onHover { hover.isOn = $0 }
@@ -232,13 +254,19 @@ struct InputBar: View {
         )
         .background(
             RoundedRectangle(cornerRadius: LokiDesign.Radius.input, style: .continuous)
-                .fill(reduceTransparency ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor)) : AnyShapeStyle(.ultraThinMaterial))
+                .fill(
+                    reduceTransparency
+                        ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
+                        : AnyShapeStyle(.ultraThinMaterial))
         )
         .overlay(
             RoundedRectangle(cornerRadius: LokiDesign.Radius.input, style: .continuous)
                 .stroke(inputStroke, lineWidth: inputStrokeWidth)
         )
-        .shadow(color: LokiDesign.Palette.cyan.color(opacity: focused && scheme == .dark ? 0.20 : 0), radius: 10)
+        .shadow(
+            color: LokiDesign.Palette.cyan.color(opacity: focused && scheme == .dark ? 0.20 : 0),
+            radius: 10
+        )
         .scaleEffect(submitFlash ? 0.992 : 1)
         .animation(LokiDesign.Motion.focus, value: focused)
         .animation(LokiDesign.Motion.focus, value: submitFlash)
@@ -263,7 +291,9 @@ struct InputBar: View {
     /// Contrast, so those use a solid ring (2 pt with Increase Contrast).
     private var inputStroke: AnyShapeStyle {
         guard isHighlighted else { return AnyShapeStyle(LokiDesign.Colors.hairline) }
-        if contrast == .increased || scheme == .light { return AnyShapeStyle(LokiDesign.Colors.focusSolid) }
+        if contrast == .increased || scheme == .light {
+            return AnyShapeStyle(LokiDesign.Colors.focusSolid)
+        }
         return AnyShapeStyle(LokiDesign.Colors.focusGradient)
     }
 

@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import LokiOrbCore
 import SwiftUI
 
 struct ChatMessage: Identifiable, Equatable {
@@ -29,8 +30,34 @@ final class LokiController: ObservableObject {
             bubble.phase = phase
             settleTask?.cancel()
             settleTask = nil
+            if phase == .idle {
+                captureOrigin = .manual
+                commandTimer = nil
+                graceSecondsRemaining = 0
+                startWakeListenerIfNeeded()
+            } else if wakeListener.state != .stopped {
+                // Not idle (capturing, working or speaking): the microphone must stay free.
+                wakeListener.stop()
+            }
         }
     }
+
+    /// How the current voice capture was started.
+    enum CaptureOrigin: Equatable {
+        case manual
+        case wake
+    }
+    private(set) var captureOrigin: CaptureOrigin = .manual
+    /// Drives the Grace Window for a wake-triggered capture. Nil for manual captures.
+    private var commandTimer: CommandCaptureTimer?
+    private var graceStartedAt: TimeInterval?
+    private let captureConfig = CommandCaptureConfig()
+    /// Level (0...1, as produced by `AudioCaptureService`) at or above which a buffer counts as speech.
+    private static let speechLevelThreshold: CGFloat = 0.12
+    /// Whole seconds left in the Grace Window, shown in the status line and the cancel control.
+    @Published private(set) var graceSecondsRemaining: Int = 0
+    /// True while the wake listener is armed (mirrors `bubble.wakeListenerArmed`).
+    @Published private(set) var wakeListenerArmed: Bool = false
     @Published private(set) var isExpanded: Bool = false
     @Published private(set) var messages: [ChatMessage] = []
     /// The action LOKI is performing right now, straight from the backend's step log.
@@ -49,11 +76,17 @@ final class LokiController: ObservableObject {
     private let client = OrchestrationClient()
     private let settings = LokiSettings.shared
     private let announcer = AccessibilityAnnouncer()
+    private let wakeListener = WakeListener()
+    private var settingsCancellables = Set<AnyCancellable>()
     /// Cue sounds are kept so they are not released while playing.
     private var cueSounds: [NSSound] = []
     private var activeJobId: String? = nil
     private var pollTask: Task<Void, Never>? = nil
     private var settleTask: Task<Void, Never>? = nil
+    /// Pending single restart of the wake listener after an unexpected microphone stop.
+    private var wakeRetryTask: Task<Void, Never>? = nil
+    private var wakeRetryUsed = false
+    private static let wakeRetryDelayNanoseconds: UInt64 = 5_000_000_000
 
     private static let maxMessages = 300
 
@@ -82,6 +115,8 @@ final class LokiController: ObservableObject {
             return messages.last(where: { $0.role == .error })?.text ?? phase.title
         case .awaitingReply where !isExpanded:
             return "Loki has a question. Open the conversation (⌘⇧Space) to answer."
+        case .confirming:
+            return "Sending in \(max(1, graceSecondsRemaining))s. Cancel to stop."
         default:
             return phase.title
         }
@@ -91,8 +126,9 @@ final class LokiController: ObservableObject {
         serverAddress = client.baseURLString
 
         audioCapture.onAmplitudeUpdate = { [weak self] level in
-            guard let self, self.phase == .listening else { return }
+            guard let self, self.phase == .listening || self.phase == .confirming else { return }
             self.bubble.meter.push(level)
+            self.feedCaptureTimer(level: level)
         }
         speechOutput.onAmplitudeUpdate = { [weak self] level in
             guard let self, self.phase == .responding else { return }
@@ -105,11 +141,96 @@ final class LokiController: ObservableObject {
                 self.phase = self.pendingQuestion != nil ? .awaitingReply : .idle
             }
         }
+
+        wakeListener.onWakePhraseDetected = { [weak self] in
+            self?.handleWakeDetection()
+        }
+        wakeListener.onStateChanged = { [weak self] state in
+            self?.handleWakeListenerState(state)
+        }
+        settings.$wakeWordEnabled
+            .removeDuplicates()
+            .sink { [weak self] enabled in
+                self?.wakeWordSettingChanged(enabled)
+            }
+            .store(in: &settingsCancellables)
+    }
+
+    // MARK: - Wake word
+
+    private func wakeWordSettingChanged(_ enabled: Bool) {
+        if enabled {
+            settings.wakeWordFailureReason = nil
+            wakeRetryUsed = false
+            startWakeListenerIfNeeded()
+        } else {
+            wakeRetryTask?.cancel()
+            wakeRetryTask = nil
+            wakeRetryUsed = false
+            wakeListener.stop()
+        }
+    }
+
+    private func startWakeListenerIfNeeded() {
+        guard settings.wakeWordEnabled, phase == .idle else { return }
+        wakeListener.start()
+    }
+
+    /// Acts on a detected wake phrase only while idle. The listener is stopped first so the
+    /// microphone is released before `AudioCaptureService` starts.
+    private func handleWakeDetection() {
+        guard phase == .idle else { return }
+        wakeListener.stop()
+        captureOrigin = .wake
+        startVoiceRecording()
+    }
+
+    private func handleWakeListenerState(_ state: WakeListener.State) {
+        wakeListenerArmed = (state == .armed)
+        bubble.wakeListenerArmed = wakeListenerArmed
+        switch state {
+        case .armed:
+            wakeRetryTask?.cancel()
+            wakeRetryTask = nil
+            wakeRetryUsed = false
+        case .retrying(let reason):
+            guard !wakeRetryUsed else {
+                disableWakeWord(reason: reason)
+                return
+            }
+            wakeRetryTask?.cancel()
+            wakeRetryTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: Self.wakeRetryDelayNanoseconds)
+                guard !Task.isCancelled, let self else { return }
+                self.wakeRetryTask = nil
+                guard self.settings.wakeWordEnabled else { return }
+                self.wakeRetryUsed = true
+                if self.phase == .idle {
+                    self.wakeListener.start()
+                } else {
+                    self.wakeListener.stop()
+                }
+            }
+        case .failed(let reason):
+            disableWakeWord(reason: reason)
+        case .stopped, .starting:
+            break
+        }
+    }
+
+    /// Turns the setting off and records why, so Settings can explain it.
+    private func disableWakeWord(reason: String) {
+        wakeRetryTask?.cancel()
+        wakeRetryTask = nil
+        wakeRetryUsed = false
+        settings.wakeWordFailureReason = reason
+        settings.wakeWordEnabled = false
     }
 
     deinit {
         pollTask?.cancel()
         settleTask?.cancel()
+        wakeRetryTask?.cancel()
     }
 
     // MARK: - Window / UI intents
@@ -121,11 +242,79 @@ final class LokiController: ObservableObject {
         }
         client.stopServerSpeech()
 
-        if phase == .listening {
-            stopAndSubmitVoice()
+        if phase == .listening || phase == .confirming {
+            if commandTimer != nil {
+                // Wake-triggered capture: the hotkey submits immediately.
+                sendCaptureEvent(.hotkeyOverride(at: Self.now))
+            } else {
+                stopAndSubmitVoice()
+            }
         } else {
+            if wakeListener.state != .stopped { wakeListener.stop() }
+            captureOrigin = .manual
+            commandTimer = nil
             startVoiceRecording()
         }
+    }
+
+    /// Cancels a wake-triggered capture or its Grace Window. Nothing is sent.
+    func cancelGraceWindow() {
+        guard commandTimer != nil else { return }
+        sendCaptureEvent(.cancelRequested(at: Self.now))
+    }
+
+    private static var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
+
+    private func sendCaptureEvent(_ event: CaptureEvent) {
+        guard var timer = commandTimer else { return }
+        let outcome = timer.handle(event)
+        commandTimer = timer
+        applyCaptureOutcome(outcome)
+    }
+
+    private func feedCaptureTimer(level: CGFloat) {
+        guard captureOrigin == .wake, commandTimer != nil else { return }
+        sendCaptureEvent(.audioLevel(isSpeech: level >= Self.speechLevelThreshold, at: Self.now))
+    }
+
+    private func applyCaptureOutcome(_ outcome: CaptureOutcome) {
+        switch outcome {
+        case .continueCapturing:
+            if phase == .confirming, let started = graceStartedAt {
+                let left = Int(
+                    (captureConfig.graceWindowDuration - (Self.now - started)).rounded(.up))
+                let clamped = max(1, left)
+                if clamped != graceSecondsRemaining { graceSecondsRemaining = clamped }
+            }
+        case .enteredGraceWindow:
+            graceStartedAt = Self.now
+            graceSecondsRemaining = max(1, Int(captureConfig.graceWindowDuration.rounded(.up)))
+            phase = .confirming
+            announcer.announce(
+                "Sending in \(graceSecondsRemaining) seconds. Press Cancel or Escape to stop.",
+                priority: .high)
+        case .resumedCapturing:
+            graceStartedAt = nil
+            graceSecondsRemaining = 0
+            phase = .listening
+        case .submit:
+            commandTimer = nil
+            graceStartedAt = nil
+            stopAndSubmitVoice()
+        case .cancelled, .timedOutNoSpeech:
+            abandonCapture()
+        }
+    }
+
+    /// Discards the recorded audio without sending it and returns to idle.
+    private func abandonCapture() {
+        commandTimer = nil
+        graceStartedAt = nil
+        _ = audioCapture.stopRecording()
+        _ = playListeningCue(named: "Pop")
+        announcer.announce("Stopped listening")
+        bubble.meter.reset()
+        phase = .idle
     }
 
     func toggleExpanded() {
@@ -146,6 +335,11 @@ final class LokiController: ObservableObject {
 
     /// Escape / collapse. Dismissing also drops an unanswered follow-up question.
     func dismissExpanded() {
+        if commandTimer != nil {
+            // Escape cancels a wake-triggered capture or its Grace Window.
+            cancelGraceWindow()
+            return
+        }
         if pendingQuestion != nil {
             pendingQuestion = nil
             if phase == .awaitingReply { phase = .idle }
@@ -230,6 +424,10 @@ final class LokiController: ObservableObject {
             try audioCapture.startRecording(discardingFirst: discard)
             bubble.meter.reset()
             activityLabel = nil
+            commandTimer =
+                captureOrigin == .wake
+                ? CommandCaptureTimer(startedAt: Self.now, config: captureConfig) : nil
+            graceStartedAt = nil
             phase = .listening
             announcer.announce("Listening", priority: .high)
         } catch {
@@ -256,7 +454,9 @@ final class LokiController: ObservableObject {
             do {
                 let accepted = try await client.sendVoiceAudio(wavData)
                 activeJobId = accepted.jobId
-                if let heard = accepted.transcription?.trimmingCharacters(in: .whitespacesAndNewlines), !heard.isEmpty {
+                if let heard = accepted.transcription?.trimmingCharacters(
+                    in: .whitespacesAndNewlines), !heard.isEmpty
+                {
                     append(ChatMessage(role: .user, text: heard))
                 }
                 await pollUntilFinished(jobId: accepted.jobId, speakFinalReply: true)
@@ -271,7 +471,9 @@ final class LokiController: ObservableObject {
     /// Plays a built-in macOS sound when listening cues are enabled. Returns how many seconds of
     /// microphone input the cue may contaminate (0 when nothing was played).
     private func playListeningCue(named name: String) -> TimeInterval {
-        guard settings.playListeningSounds, let sound = NSSound(named: NSSound.Name(name)) else { return 0 }
+        guard settings.playListeningSounds, let sound = NSSound(named: NSSound.Name(name)) else {
+            return 0
+        }
         sound.volume = 0.4
         cueSounds.removeAll { !$0.isPlaying }
         cueSounds.append(sound)
@@ -389,7 +591,8 @@ final class LokiController: ObservableObject {
                 }
                 let display = payload?.message ?? payload?.spokenMessage ?? ""
                 let spoken = payload?.spokenMessage ?? payload?.message ?? ""
-                let delivered = await deliverReply(display: display, spoken: spoken, speak: speakFinalReply)
+                let delivered = await deliverReply(
+                    display: display, spoken: spoken, speak: speakFinalReply)
                 completeJob()
                 // A reply announces itself; "Done" is only needed when there was no reply text.
                 if !delivered { announcer.announce("Done") }

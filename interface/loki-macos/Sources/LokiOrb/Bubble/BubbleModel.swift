@@ -6,6 +6,8 @@ import SwiftUI
 enum AssistantPhase: Equatable {
     case idle
     case listening
+    /// Grace Window after a wake-triggered command: about to send, cancellable.
+    case confirming
     case thinking
     case executing
     case responding
@@ -17,6 +19,7 @@ enum AssistantPhase: Equatable {
         switch self {
         case .idle: return "Ready"
         case .listening: return "Listening"
+        case .confirming: return "Confirm"
         case .thinking: return "Thinking"
         case .executing: return "Working"
         case .responding: return "Responding"
@@ -31,6 +34,7 @@ enum AssistantPhase: Equatable {
         switch self {
         case .idle: return "circle.dotted"
         case .listening: return "waveform"
+        case .confirming: return "timer"
         case .thinking: return "ellipsis"
         case .executing: return "bolt.fill"
         case .responding: return "sparkles"
@@ -45,6 +49,7 @@ enum AssistantPhase: Equatable {
         switch self {
         case .idle: return LokiDesign.Palette.indigo
         case .listening: return LokiDesign.Palette.cyan
+        case .confirming: return LokiDesign.Palette.paleBlue
         case .thinking: return LokiDesign.Palette.violet
         case .executing: return LokiDesign.Palette.cyan
         case .responding: return LokiDesign.Palette.electricBlue
@@ -113,6 +118,8 @@ final class BubbleModel: ObservableObject {
     @Published private(set) var burstStart: TimeInterval?
     /// False while the panel is occluded or the display is asleep, so the timeline can stop drawing.
     @Published var isRendering: Bool = true
+    /// True while the wake-word listener is armed. The bubble shows a dot when idle.
+    @Published var wakeListenerArmed: Bool = false
 
     let meter = AudioMeter()
     private var emphasisTask: Task<Void, Never>?
