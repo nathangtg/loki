@@ -11,11 +11,14 @@ from src.skills.registry import register_skill
 
 LOGGER = logging.getLogger(__name__)
 
-_SPOTIFY_PLAY_QUERY_RE = re.compile(
-    r"^(?:hey\s+loki[,\s]*|loki[,\s]*|please\s+|can\s+you\s+(?:please\s+)?|could\s+you\s+(?:please\s+)?)*"
-    r"play\s+(.+?)\s+(?:on|in)\s+spotify(?:\s+for\s+me(?:\s+please)?)?$",
+_PLAY_PREFIX_RE = re.compile(
+    r"^(?:(?:hey\s+)?loki[,\s]*|please\s+|can\s+you\s+(?:please\s+)?|could\s+you\s+(?:please\s+)?)*"
+    r"play\s+(?:me\s+)?(?P<rest>.+)$",
     re.IGNORECASE,
 )
+_TRAILING_POLITE_RE = re.compile(r"(?:\s+for\s+me)?(?:\s+please)?$", re.IGNORECASE)
+_TRAILING_SPOTIFY_RE = re.compile(r"(?:\s+(?:on|in|with|using))?\s+spotify$", re.IGNORECASE)
+_GENERIC_QUERIES = {"music", "some music", "a song", "something", "spotify", "on spotify", "in spotify"}
 
 
 def extract_spotify_intent_from_goal(goal: str) -> tuple[str, dict] | None:
@@ -35,10 +38,14 @@ def extract_spotify_intent_from_goal(goal: str) -> tuple[str, dict] | None:
         return "previous_track", {}
     if any(p in lower for p in ("what's playing", "what is playing", "currently playing", "now playing")):
         return "now_playing", {}
-    m_play = _SPOTIFY_PLAY_QUERY_RE.match(clean)
+    m_play = _PLAY_PREFIX_RE.match(clean)
     if m_play:
-        q = m_play.group(1).strip()
-        if q and q.lower() not in {"music", "some music", "a song", "spotify"}:
+        rest = _TRAILING_POLITE_RE.sub("", m_play.group("rest").strip()).strip()
+        # Fused STT forms like "musonsportify" never match "\s+spotify$", so the
+        # "spotify" guard above or this strip leaves them unmatched (artist is unrecoverable).
+        q = _TRAILING_SPOTIFY_RE.sub("", rest).strip(" ,")
+        if q and q.lower() not in _GENERIC_QUERIES and "spotify" not in q.lower():
+            LOGGER.info("spotify_skill: extracted query %r from goal %r", q, goal)
             return "search", {"query": q}
     return None
 
@@ -65,26 +72,47 @@ def _play_track_applescript(uri: str, context_uri: str | None = None) -> None:
     run_applescript(script)
 
 
-def _search_in_spotify_ui(query: str) -> str:
-    _activate_spotify()
-    script = """
-on run argv
-    set searchQuery to item 1 of argv
-    tell application "Spotify" to activate
-    delay 0.6
-    tell application "System Events"
-        tell process "Spotify"
-            keystroke "l" using {command down}
-            delay 0.4
-            keystroke searchQuery
-            delay 0.2
-            key code 36
-        end tell
-    end tell
-end run
+# Seconds to wait for Spotify's quick-search results before pressing Shift+Enter.
+# Tune between 3 and 5 depending on how quickly results return.
+_SEARCH_RESULTS_DELAY = 3.0
+
+_PLAYBACK_STATE_SCRIPT = """
+tell application "Spotify"
+    return (player state as text) & "|||" & (name of current track) & "|||" & (artist of current track)
+end tell
 """
-    run_applescript(script, query, timeout=10)
-    return f"Searched for {query} in Spotify. Choose a result to play it."
+
+_HONEST_FAILURE = "I searched Spotify for {query} but could not start playback automatically."
+
+
+def _search_and_play_in_spotify_ui(query: str) -> str:
+    """Drive Spotify's quick search by keyboard (Cmd+K, type, Shift+Enter) and verify playback.
+
+    Keystroke automation requires Accessibility permission for the process running the backend.
+    """
+    failure = _HONEST_FAILURE.format(query=query)
+    _activate_spotify()
+    time.sleep(1.0)
+    try:
+        run_applescript(
+            'tell application "System Events"\n'
+            '    keystroke "k" using {command down}\n'
+            "    delay 0.5\n"
+            f'    keystroke "{escape_as_string(query)}"\n'
+            "end tell"
+        )
+        time.sleep(_SEARCH_RESULTS_DELAY)
+        run_applescript('tell application "System Events" to key code 36 using {shift down}')
+        time.sleep(2.0)
+        state, _, rest = run_applescript(_PLAYBACK_STATE_SCRIPT).partition("|||")
+        name, _, artist = rest.partition("|||")
+    except RuntimeError as exc:
+        LOGGER.warning("spotify_skill: keyboard search/verify failed: %s", exc)
+        return failure
+    if state.strip().lower() == "playing":
+        return f"Playing {name.strip()} by {artist.strip()} on Spotify."
+    LOGGER.warning("spotify_skill: playback not confirmed (state=%r, track=%r)", state, name)
+    return failure
 
 
 def _play_track(params: dict) -> str:
@@ -92,7 +120,7 @@ def _play_track(params: dict) -> str:
     if not uri:
         raise ValueError("Missing track URI or query")
     if not uri.startswith("spotify:"):
-        return _search_in_spotify_ui(uri)
+        return _search_and_play_in_spotify_ui(uri)
     _activate_spotify()
     _play_track_applescript(uri, params.get("in_context") or params.get("in context"))
     return f"Now playing {uri} on Spotify."
@@ -124,7 +152,7 @@ def _previous_track(params: dict) -> str:
 
 
 def _now_playing(params: dict) -> str:
-    script = '''
+    script = """
     tell application "Spotify"
         if player state is stopped then
             return "STOPPED"
@@ -133,7 +161,7 @@ def _now_playing(params: dict) -> str:
         set trackArtist to artist of current track
         return trackName & "|||" & trackArtist
     end tell
-    '''
+    """
     raw = run_applescript(script).strip()
     if not raw or raw == "STOPPED":
         return "Nothing is currently playing"
@@ -160,62 +188,80 @@ def _build_spotify_skill() -> Skill:
         app_names={"spotify", "spotify.app"},
     )
 
-    skill.add_intent(SkillIntent(
-        name="play_track",
-        description="Start playback of a Spotify track URI (spotify:track:...). A plain query is searched instead.",
-        params=["direct_parameter"],
-        handler=_play_track,
-    ))
-    skill.add_intent(SkillIntent(
-        name="search",
-        description="Open Spotify and search for a song, artist, or topic. Use this for 'play <song> on Spotify'; the user picks the result.",
-        params=["query"],
-        handler=lambda params: _search_in_spotify_ui(
-            params.get("query") or params.get("direct_parameter") or ""
-        ),
-    ))
-    skill.add_intent(SkillIntent(
-        name="play",
-        description="Resume paused playback (does NOT search or start new music).",
-        params=[],
-        handler=_play,
-    ))
-    skill.add_intent(SkillIntent(
-        name="pause",
-        description="Pause the current playback.",
-        params=[],
-        handler=_pause,
-    ))
-    skill.add_intent(SkillIntent(
-        name="playpause",
-        description="Toggle play/pause.",
-        params=[],
-        handler=_playpause,
-    ))
-    skill.add_intent(SkillIntent(
-        name="next_track",
-        description="Skip to the next track.",
-        params=[],
-        handler=_next_track,
-    ))
-    skill.add_intent(SkillIntent(
-        name="previous_track",
-        description="Go back to the previous track.",
-        params=[],
-        handler=_previous_track,
-    ))
-    skill.add_intent(SkillIntent(
-        name="now_playing",
-        description="Show what is currently playing.",
-        params=[],
-        handler=_now_playing,
-    ))
-    skill.add_intent(SkillIntent(
-        name="set_volume",
-        description="Set playback volume (0-100).",
-        params=["volume"],
-        handler=_set_volume,
-    ))
+    skill.add_intent(
+        SkillIntent(
+            name="play_track",
+            description="Start playback of a Spotify track URI (spotify:track:...). A plain query is searched instead.",
+            params=["direct_parameter"],
+            handler=_play_track,
+        )
+    )
+    skill.add_intent(
+        SkillIntent(
+            name="search",
+            description="Search Spotify for a song, artist, or topic and start playing the top result automatically. Use this for 'play <song> on Spotify'.",
+            params=["query"],
+            handler=lambda params: _search_and_play_in_spotify_ui(
+                params.get("query") or params.get("direct_parameter") or ""
+            ),
+        )
+    )
+    skill.add_intent(
+        SkillIntent(
+            name="play",
+            description="Resume paused playback (does NOT search or start new music).",
+            params=[],
+            handler=_play,
+        )
+    )
+    skill.add_intent(
+        SkillIntent(
+            name="pause",
+            description="Pause the current playback.",
+            params=[],
+            handler=_pause,
+        )
+    )
+    skill.add_intent(
+        SkillIntent(
+            name="playpause",
+            description="Toggle play/pause.",
+            params=[],
+            handler=_playpause,
+        )
+    )
+    skill.add_intent(
+        SkillIntent(
+            name="next_track",
+            description="Skip to the next track.",
+            params=[],
+            handler=_next_track,
+        )
+    )
+    skill.add_intent(
+        SkillIntent(
+            name="previous_track",
+            description="Go back to the previous track.",
+            params=[],
+            handler=_previous_track,
+        )
+    )
+    skill.add_intent(
+        SkillIntent(
+            name="now_playing",
+            description="Show what is currently playing.",
+            params=[],
+            handler=_now_playing,
+        )
+    )
+    skill.add_intent(
+        SkillIntent(
+            name="set_volume",
+            description="Set playback volume (0-100).",
+            params=["volume"],
+            handler=_set_volume,
+        )
+    )
 
     return skill
 
