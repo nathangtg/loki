@@ -1,8 +1,3 @@
-"""Property 8: History summarization preserves recency and bounds.
-
-Validates: Requirements 3.3, 3.4, 3.5
-"""
-
 from __future__ import annotations
 
 from hypothesis import given, settings

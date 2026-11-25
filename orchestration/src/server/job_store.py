@@ -9,7 +9,6 @@ from src.server.config import LOGGER
 
 
 def append_bounded(items: list[Any], item: Any, max_len: int) -> None:
-    """Append item, dropping the oldest entries so len(items) <= max_len."""
     items.append(item)
     overflow = len(items) - max_len
     if overflow > 0:
@@ -29,10 +28,6 @@ def _drop(job_id: str) -> None:
 
 
 def evict_expired_jobs(now: float | None = None) -> int:
-    """Remove finished jobs older than the TTL, then trim to the retention cap.
-
-    Running jobs are never evicted. Returns the number of jobs removed.
-    """
     current = time.time() if now is None else now
     removed = 0
     with config.jobs_lock:
@@ -56,7 +51,6 @@ def evict_expired_jobs(now: float | None = None) -> int:
 
 
 def start_job_sweeper(interval: float | None = None) -> threading.Thread:
-    """Start a daemon thread that periodically evicts expired jobs."""
     period = float(interval if interval is not None else config.JOB_SWEEP_INTERVAL_SECONDS)
 
     def _run() -> None:

@@ -86,10 +86,6 @@ _HONEST_FAILURE = "I searched Spotify for {query} but could not start playback a
 
 
 def _search_and_play_in_spotify_ui(query: str) -> str:
-    """Drive Spotify's quick search by keyboard (Cmd+K, type, Shift+Enter) and verify playback.
-
-    Keystroke automation requires Accessibility permission for the process running the backend.
-    """
     failure = _HONEST_FAILURE.format(query=query)
     _activate_spotify()
     time.sleep(1.0)

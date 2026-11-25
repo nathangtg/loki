@@ -163,7 +163,6 @@ def resume_graph(
     on_step: Callable[..., Any] | None = None,
     on_message: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    """Resume a graph paused by ask-user with the user's answer."""
     from src.memory import SessionMemory
 
     state = load_state(job_id)

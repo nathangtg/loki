@@ -58,3 +58,6 @@ orchestration/screenshots/
 /SKILLS_DESIGN.md
 /DEMO.md
 /orchestration/STT_SETUP.md
+
+.kiro/*
+.agents/*

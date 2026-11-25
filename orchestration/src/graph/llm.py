@@ -49,7 +49,6 @@ _DEFAULT_KV_TYPE = KV_TYPE_MAP["q8_0"]
 
 
 def resolve_kv_type(value: object) -> int:
-    """Map a KV type name (e.g. "q8_0") or ggml id to an id; invalid values fall back to q8_0."""
     if isinstance(value, bool):
         LOGGER.warning("llm: invalid KV cache type %r, using q8_0", value)
         return _DEFAULT_KV_TYPE

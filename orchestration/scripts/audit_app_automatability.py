@@ -80,7 +80,6 @@ def _find_sdef(bundle: Path, info: dict) -> Path | None:
 
 
 def _parse_sdef(path: Path) -> tuple[int, int, int]:
-    """Return (app-specific commands, app-specific classes, total items)."""
     try:
         root = ET.parse(path).getroot()
     except Exception:
@@ -132,9 +131,7 @@ def _url_schemes(info: dict) -> list[str]:
     schemes: list[str] = []
     for entry in info.get("CFBundleURLTypes") or []:
         if isinstance(entry, dict):
-            schemes.extend(
-                s for s in entry.get("CFBundleURLSchemes") or [] if isinstance(s, str)
-            )
+            schemes.extend(s for s in entry.get("CFBundleURLSchemes") or [] if isinstance(s, str))
     return sorted({s for s in schemes if s.lower() not in {"http", "https"}})
 
 
@@ -142,7 +139,6 @@ FOREIGN_TOOLKITS = {"electron", "cef", "qt", "flutter", "unity", "godot", "java"
 
 
 def classify(row: dict) -> tuple[str, str]:
-    """Static heuristic. Thresholds are judgement calls, not measurements."""
     specific = int(row["sdef_specific_commands"]) + int(row["sdef_specific_classes"])
     classes = int(row["sdef_specific_classes"])
     toolkit = row["toolkit"]
@@ -187,9 +183,7 @@ def audit_bundle(bundle: Path) -> dict | None:
         "bundle_id": info.get("CFBundleIdentifier", ""),
         "version": info.get("CFBundleShortVersionString", ""),
         "location": str(bundle.parent),
-        "category": (info.get("LSApplicationCategoryType") or "").replace(
-            "public.app-category.", ""
-        ),
+        "category": (info.get("LSApplicationCategoryType") or "").replace("public.app-category.", ""),
         "toolkit": _toolkit(bundle, info),
         "scriptable": scriptable,
         "sdef_specific_commands": commands,
@@ -228,9 +222,7 @@ def iter_bundles() -> list[Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument(
-        "--out", type=Path, default=Path("research/data/app-automatability.csv")
-    )
+    parser.add_argument("--out", type=Path, default=Path("research/data/app-automatability.csv"))
     args = parser.parse_args()
 
     rows = [r for b in iter_bundles() if (r := audit_bundle(b))]

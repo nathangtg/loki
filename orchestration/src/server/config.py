@@ -21,7 +21,6 @@ LOGGER = logging.getLogger("loki.server")
 
 
 def _env_int(name: str, default: int) -> int:
-    """Read a positive int from the environment, falling back with a warning."""
     raw = os.getenv(name)
     if raw is None or not raw.strip():
         return default

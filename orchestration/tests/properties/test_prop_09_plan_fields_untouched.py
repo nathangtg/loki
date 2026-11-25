@@ -1,8 +1,3 @@
-"""Property 9: Summarization leaves plan fields untouched.
-
-Validates: Requirements 3.6
-"""
-
 from __future__ import annotations
 
 import copy

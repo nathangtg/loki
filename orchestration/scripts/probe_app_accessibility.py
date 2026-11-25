@@ -177,7 +177,6 @@ def ax_get(element, attribute):
 
 
 def has_accessible_name(element) -> bool:
-    """True if the element exposes any non-empty name. The string is discarded."""
     for attr in ("AXTitle", "AXDescription"):
         value = ax_get(element, attr)
         if isinstance(value, str) and value.strip():
@@ -241,11 +240,8 @@ def verdict_for(stats: dict, windows: int) -> str:
 
 
 def set_loki_switches(pid: int) -> bool:
-    """Set the same two attributes Loki's ax_locator sets. Returns True on success."""
     app_el = AXUIElementCreateApplication(pid)
-    results = [
-        AXUIElementSetAttributeValue(app_el, attr, True) for attr in LOKI_AX_SWITCHES
-    ]
+    results = [AXUIElementSetAttributeValue(app_el, attr, True) for attr in LOKI_AX_SWITCHES]
     time.sleep(SWITCH_SETTLE_S)
     return results[0] == kAXErrorSuccess
 
@@ -279,9 +275,7 @@ def probe_running_app(pid: int) -> dict:
         walk(window, stats)
 
     menubar = ax_get(app_el, "AXMenuBar")
-    menubar_items = (
-        len(list(ax_get(menubar, "AXChildren") or [])) if menubar is not None else 0
-    )
+    menubar_items = len(list(ax_get(menubar, "AXChildren") or [])) if menubar is not None else 0
 
     total = stats["controls_total"]
     visited = stats["nodes_visited"]
@@ -304,11 +298,6 @@ def probe_running_app(pid: int) -> dict:
 
 
 def quit_if_launched(app, bundle_id: str, launched_by_probe: bool) -> bool:
-    """Ask a probe-launched app to quit. Returns True if it is still running.
-
-    NSRunningApplication.isTerminated() is only refreshed by a run loop, so the
-    check polls the live process list by bundle id instead.
-    """
     if not launched_by_probe:
         return False
     # Electron and Qt apps often ignore the first quit request (it dismisses a
@@ -324,7 +313,6 @@ def quit_if_launched(app, bundle_id: str, launched_by_probe: bool) -> bool:
 
 
 def probe_app(name: str, match_loki_switches: bool = False) -> list[dict]:
-    """Return one row (default exposure) or two (plus Loki's switches)."""
     row = {f: "" for f in FIELDS}
     row["app"] = name
     row["switch_state"] = "default"
@@ -387,13 +375,9 @@ def print_plan(apps: list[str]) -> None:
     print("\nAttributes read:")
     for item in ATTRIBUTES_READ:
         print(f"  + {item}")
-    print(
-        "\nOptional write (only with --match-loki-ax-switches, Electron/Qt apps only):"
-    )
+    print("\nOptional write (only with --match-loki-ax-switches, Electron/Qt apps only):")
     for attr in LOKI_AX_SWITCHES:
-        print(
-            f"  ! set {attr}=true on {', '.join(sorted(SWITCH_ELIGIBLE))} (same as ax_locator.py)"
-        )
+        print(f"  ! set {attr}=true on {', '.join(sorted(SWITCH_ELIGIBLE))} (same as ax_locator.py)")
     print("\nNever read or stored:")
     for item in NEVER_READ:
         print(f"  x {item}")
@@ -418,9 +402,7 @@ def main() -> int:
         metavar="NAME",
         help="subset of the built-in allowlist (cannot add apps)",
     )
-    parser.add_argument(
-        "--out", type=Path, default=Path("../research/data/ax-probe.csv")
-    )
+    parser.add_argument("--out", type=Path, default=Path("../research/data/ax-probe.csv"))
     args = parser.parse_args()
 
     apps = list(ALLOWLIST)
@@ -459,9 +441,7 @@ def main() -> int:
         "macos": platform.mac_ver()[0],
         "apps_requested": apps,
         "apps_probed": sorted({r["app"] for r in rows if r["status"] == "probed"}),
-        "apps_skipped": {
-            r["app"]: r["reason"] for r in rows if r["status"] != "probed"
-        },
+        "apps_skipped": {r["app"]: r["reason"] for r in rows if r["status"] != "probed"},
         "attributes_read": ATTRIBUTES_READ,
         "never_read_or_stored": NEVER_READ,
         "limits": {
@@ -470,16 +450,10 @@ def main() -> int:
             "ax_timeout_s": AX_TIMEOUT_S,
         },
         "switches_set": bool(args.match_loki_ax_switches),
-        "switch_attributes": list(LOKI_AX_SWITCHES)
-        if args.match_loki_ax_switches
-        else [],
-        "switch_eligible_apps": sorted(SWITCH_ELIGIBLE)
-        if args.match_loki_ax_switches
-        else [],
+        "switch_attributes": list(LOKI_AX_SWITCHES) if args.match_loki_ax_switches else [],
+        "switch_eligible_apps": sorted(SWITCH_ELIGIBLE) if args.match_loki_ax_switches else [],
     }
-    args.out.with_suffix(".json").write_text(
-        json.dumps(meta, indent=2), encoding="utf-8"
-    )
+    args.out.with_suffix(".json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(f"wrote {args.out} and {args.out.with_suffix('.json')}")
     return 0
 

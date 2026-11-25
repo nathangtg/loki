@@ -121,10 +121,6 @@ def run_pipeline_async(
                 )
 
     def _wait_for_answer(question: str) -> str | None:
-        """Block (without holding pipeline_lock) until the user answers.
-
-        Returns None on timeout or if the job was evicted while waiting.
-        """
         event = threading.Event()
         job_events[job_id] = event
 

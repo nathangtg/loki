@@ -18,6 +18,7 @@ PROMPT_LOOKUP_NUM_PRED = int(os.getenv("LOKI_PROMPT_LOOKUP_NUM_PRED", "10"))
 N_CTX = int(os.getenv("LOKI_N_CTX", "8192"))
 N_GPU_LAYERS = int(os.getenv("LOKI_N_GPU_LAYERS", "-1"))
 N_BATCH = int(os.getenv("LOKI_N_BATCH", "256"))
+
 # KV cache types: names (f16, q8_0, q4_0, ...) or raw ggml type ids. Invalid values fall back to q8_0.
 KV_TYPE_K = os.getenv("LOKI_KV_TYPE_K", os.getenv("LOKI_KV_TYPE", "q8_0")).strip()
 KV_TYPE_V = os.getenv("LOKI_KV_TYPE_V", os.getenv("LOKI_KV_TYPE", "q8_0")).strip()
