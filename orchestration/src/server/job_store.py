@@ -17,6 +17,12 @@ def append_bounded(items: list[Any], item: Any, max_len: int) -> None:
 
 
 def _drop(job_id: str) -> None:
+    try:
+        from src.graph.checkpoint import delete_state
+
+        delete_state(job_id)
+    except Exception:
+        LOGGER.debug("Could not delete checkpoint for %s", job_id, exc_info=True)
     config.jobs.pop(job_id, None)
     config.job_events.pop(job_id, None)
     config.job_done_events.pop(job_id, None)

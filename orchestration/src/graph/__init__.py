@@ -1,20 +1,31 @@
 from __future__ import annotations
 
+import functools
 import logging
+import uuid
 from typing import Any, Callable, Literal
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Command
 
+from src.graph.checkpoint import (
+    delete_state,
+    get_checkpointer,
+    inject_callbacks,
+    load_state,
+    runtime_callbacks,
+    thread_config,
+)
 from src.graph.config import LokiState
 from src.graph.nodes import (
-    plan_node,
-    skill_node,
-    route_node,
-    observe_node,
-    reason_node,
     act_node,
-    reflect_node,
     finish_node,
+    observe_node,
+    plan_node,
+    reason_node,
+    reflect_node,
+    route_node,
+    skill_node,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -62,14 +73,21 @@ def build_loki_graph():
 
     g = StateGraph(LokiState)
 
-    g.add_node("plan", plan_node)
-    g.add_node("skill", skill_node)
-    g.add_node("route", route_node)
-    g.add_node("observe", observe_node)
-    g.add_node("reason", reason_node)
-    g.add_node("act", act_node)
-    g.add_node("reflect", reflect_node)
-    g.add_node("finish", finish_node)
+    def _rt(fn):
+        @functools.wraps(fn)
+        def wrapper(state):
+            return fn(inject_callbacks(state))
+
+        return wrapper
+
+    g.add_node("plan", _rt(plan_node))
+    g.add_node("skill", _rt(skill_node))
+    g.add_node("route", _rt(route_node))
+    g.add_node("observe", _rt(observe_node))
+    g.add_node("reason", _rt(reason_node))
+    g.add_node("act", _rt(act_node))
+    g.add_node("reflect", _rt(reflect_node))
+    g.add_node("finish", _rt(finish_node))
 
     g.add_edge(START, "plan")
     g.add_conditional_edges("plan", _after_plan)
@@ -81,8 +99,84 @@ def build_loki_graph():
     g.add_conditional_edges("reflect", _after_reflect)
     g.add_edge("finish", END)
 
-    _COMPILED_GRAPH = g.compile()
+    _COMPILED_GRAPH = g.compile(checkpointer=get_checkpointer())
     return _COMPILED_GRAPH
+
+
+def _interrupt_question(final: dict[str, Any]) -> str | None:
+    pending = final.get("__interrupt__")
+    if not pending:
+        return None
+    value = getattr(pending[0], "value", pending[0])
+    if isinstance(value, dict):
+        return str(value.get("question", ""))
+    return str(value)
+
+
+def _finish_run(
+    final: dict[str, Any],
+    goal: str,
+    job_id: str,
+    memory: Any,
+) -> dict[str, Any]:
+    from src.graph.playbook import _extract_domain, record_playbook
+
+    question = _interrupt_question(final)
+    if question is not None:
+        return {"status": "waiting_for_user", "question": question, "turns": final.get("turn", 0)}
+
+    delete_state(job_id)
+
+    full_history = final.get("history", [])
+    final_url = final.get("current_url", "")
+    final_domain = _extract_domain(final_url)
+
+    if final.get("result") and not final.get("error"):
+        memory.current_url = final_url
+        memory.current_page_title = final.get("page_title", "")
+
+        if final_domain:
+            record_playbook(
+                domain=final_domain,
+                history=full_history,
+                post_login_url=final_url,
+            )
+        elif final.get("_opened_app_name"):
+            from src.graph.playbook import record_native_macro
+
+            record_native_macro(
+                goal=goal,
+                app_name=str(final.get("_opened_app_name")),
+                history=full_history,
+            )
+
+    return {
+        "status": "ok",
+        "message": final.get("result", ""),
+        "turns": final.get("turn", 0),
+    }
+
+
+def resume_graph(
+    job_id: str,
+    answer: str,
+    on_step: Callable[..., Any] | None = None,
+    on_message: Callable[..., Any] | None = None,
+) -> dict[str, Any]:
+    """Resume a graph paused by ask-user with the user's answer."""
+    from src.memory import SessionMemory
+
+    state = load_state(job_id)
+    if state is None:
+        return {"status": "error", "message": f"No paused state for job {job_id}"}
+    goal = state.get("goal", "")
+    graph = build_loki_graph()
+    with runtime_callbacks(on_step=on_step, on_message=on_message):
+        final = graph.invoke(
+            Command(resume=answer),
+            config=thread_config(job_id, recursion_limit=150),
+        )
+    return _finish_run(final, goal, job_id, SessionMemory())
 
 
 def run_graph(
@@ -90,17 +184,19 @@ def run_graph(
     on_step: Callable[..., Any] | None = None,
     on_message: Callable[..., Any] | None = None,
     ask_user: Callable[..., Any] | None = None,
+    job_id: str | None = None,
+    interruptible: bool = False,
 ) -> dict[str, Any]:
     from src.graph.playbook import (
-        _extract_domain,
         extract_credentials_from_goal,
         get_native_macro,
         get_playbook_for_goal,
-        record_playbook,
         replay_login,
         replay_native_macro,
     )
     from src.memory import SessionMemory
+
+    job_id = job_id or uuid.uuid4().hex
 
     memory = SessionMemory()
     memory.record_command(goal)
@@ -121,6 +217,7 @@ def run_graph(
     apps: list[str] = []
     try:
         from src.graph.app_knowledge import AppKnowledge
+
         apps = AppKnowledge().get_installed_apps()
     except Exception:
         pass
@@ -163,60 +260,32 @@ def run_graph(
 
     session_ctx = memory.get_state_only()
 
-    final = graph.invoke(
-        {
-            "goal": goal,
-            "on_step": on_step,
-            "on_message": on_message,
-            "ask_user": ask_user,
-            "turn": 0,
-            "history": replay_history,
-            "plan": [],
-            "plan_step": 0,
-            "plan_reasoning": "",
-            "next_action": {},
-            "done": False,
-            "current_url": starting_url,
-            "page_title": starting_title,
-            "page_text": "",
-            "screen_elements": "",
-            "installed_apps": apps,
-            "shortcuts_raw": "",
-            "browser_launched": browser_up,
-            "findings": [],
-            "step_routed": False,
-            "result": "",
-            "error": "",
-            "session_context": session_ctx,
-        },
-        config={"recursion_limit": 150},
-    )
+    with runtime_callbacks(on_step=on_step, on_message=on_message, ask_user=ask_user):
+        final = graph.invoke(
+            {
+                "goal": goal,
+                "interruptible": interruptible,
+                "turn": 0,
+                "history": replay_history,
+                "plan": [],
+                "plan_step": 0,
+                "plan_reasoning": "",
+                "next_action": {},
+                "done": False,
+                "current_url": starting_url,
+                "page_title": starting_title,
+                "page_text": "",
+                "screen_elements": "",
+                "installed_apps": apps,
+                "shortcuts_raw": "",
+                "browser_launched": browser_up,
+                "findings": [],
+                "step_routed": False,
+                "result": "",
+                "error": "",
+                "session_context": session_ctx,
+            },
+            config=thread_config(job_id, recursion_limit=150),
+        )
 
-    full_history = final.get("history", [])
-    final_url = final.get("current_url", "")
-    final_domain = _extract_domain(final_url)
-
-    if final.get("result") and not final.get("error"):
-        memory.current_url = final_url
-        memory.current_page_title = final.get("page_title", "")
-
-        if final_domain:
-            record_playbook(
-                domain=final_domain,
-                history=full_history,
-                post_login_url=final_url,
-            )
-        elif final.get("_opened_app_name"):
-            from src.graph.playbook import record_native_macro
-
-            record_native_macro(
-                goal=goal,
-                app_name=str(final.get("_opened_app_name")),
-                history=full_history,
-            )
-
-    return {
-        "status": "ok",
-        "message": final.get("result", ""),
-        "turns": final.get("turn", 0),
-    }
+    return _finish_run(final, goal, job_id, memory)

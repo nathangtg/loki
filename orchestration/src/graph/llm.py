@@ -8,22 +8,23 @@ import threading
 from typing import Optional
 
 from src.graph.config import (
+    CHAT_FORMAT,
+    DRAFT_MODEL_PATH,
+    KV_TYPE_K,
+    KV_TYPE_V,
     LLM_BACKEND,
-    MODEL_PATH,
+    LORA_ADAPTER_PATH,
     MLX_MODEL_PATH,
     MMPROJ_PATH,
-    DRAFT_MODEL_PATH,
-    LORA_ADAPTER_PATH,
-    SPECULATIVE_MODE,
-    PROMPT_LOOKUP_NGRAM,
-    PROMPT_LOOKUP_NUM_PRED,
+    MODEL_PATH,
+    N_BATCH,
     N_CTX,
     N_GPU_LAYERS,
-    N_BATCH,
-    KV_CACHE_TYPE,
-    CHAT_FORMAT,
-    USE_MLOCK,
     PROMPT_CACHE_MB,
+    PROMPT_LOOKUP_NGRAM,
+    PROMPT_LOOKUP_NUM_PRED,
+    SPECULATIVE_MODE,
+    USE_MLOCK,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -32,6 +33,37 @@ _llm_instance = None
 _llm_lock = threading.Lock()
 _mlx_instance: Optional[tuple] = None
 _mlx_prompt_cache: Optional[dict] = None
+
+
+# ggml type ids usable for the KV cache.
+KV_TYPE_MAP: dict[str, int] = {
+    "f32": 0,
+    "f16": 1,
+    "q4_0": 2,
+    "q4_1": 3,
+    "q5_0": 6,
+    "q5_1": 7,
+    "q8_0": 8,
+}
+_DEFAULT_KV_TYPE = KV_TYPE_MAP["q8_0"]
+
+
+def resolve_kv_type(value: object) -> int:
+    """Map a KV type name (e.g. "q8_0") or ggml id to an id; invalid values fall back to q8_0."""
+    if isinstance(value, bool):
+        LOGGER.warning("llm: invalid KV cache type %r, using q8_0", value)
+        return _DEFAULT_KV_TYPE
+    if isinstance(value, int):
+        if value in KV_TYPE_MAP.values():
+            return value
+    elif isinstance(value, str):
+        key = value.strip().lower()
+        if key in KV_TYPE_MAP:
+            return KV_TYPE_MAP[key]
+        if key.isdigit() and int(key) in KV_TYPE_MAP.values():
+            return int(key)
+    LOGGER.warning("llm: invalid KV cache type %r, using q8_0", value)
+    return _DEFAULT_KV_TYPE
 
 
 def _get_mlx_llm() -> tuple:
@@ -45,9 +77,7 @@ def _get_mlx_llm() -> tuple:
 
         target_path = MLX_MODEL_PATH or MODEL_PATH
         if not target_path:
-            raise RuntimeError(
-                "LOKI_MLX_MODEL_PATH (or LOKI_MODEL_PATH) is not set for MLX backend."
-            )
+            raise RuntimeError("LOKI_MLX_MODEL_PATH (or LOKI_MODEL_PATH) is not set for MLX backend.")
 
         from mlx_lm import load as mlx_load
 
@@ -146,8 +176,8 @@ def _get_llm():
             use_mmap=True,
             use_mlock=USE_MLOCK,
             flash_attn=True,
-            type_k=KV_CACHE_TYPE,
-            type_v=KV_CACHE_TYPE,
+            type_k=resolve_kv_type(KV_TYPE_K),
+            type_v=resolve_kv_type(KV_TYPE_V),
             logits_all=False,
             verbose=False,
         )
@@ -166,7 +196,8 @@ def _get_llm():
             except Exception as exc:
                 LOGGER.warning(
                     "llm: Gemma4ChatHandler failed, falling back to chat_format=%s: %s",
-                    CHAT_FORMAT, exc,
+                    CHAT_FORMAT,
+                    exc,
                 )
                 _apply_chat_format(kwargs)
         else:
@@ -191,10 +222,13 @@ def _get_llm():
                     )
                     LOGGER.info(
                         "llm: self-speculative decoding enabled (prompt-lookup, ngram=%d, num_pred=%d)",
-                        PROMPT_LOOKUP_NGRAM, PROMPT_LOOKUP_NUM_PRED,
+                        PROMPT_LOOKUP_NGRAM,
+                        PROMPT_LOOKUP_NUM_PRED,
                     )
                 except Exception as exc:
-                    LOGGER.warning("llm: prompt-lookup decoding unavailable, continuing without speculative decoding: %s", exc)
+                    LOGGER.warning(
+                        "llm: prompt-lookup decoding unavailable, continuing without speculative decoding: %s", exc
+                    )
 
             if "draft_model" in kwargs:
                 kwargs["logits_all"] = True
@@ -203,7 +237,9 @@ def _get_llm():
 
         LOGGER.info(
             "llm: loading GGUF model %s (n_ctx=%d, n_gpu_layers=%d)",
-            MODEL_PATH, N_CTX, N_GPU_LAYERS,
+            MODEL_PATH,
+            N_CTX,
+            N_GPU_LAYERS,
         )
         _llm_instance = Llama(**kwargs)
         if PROMPT_CACHE_MB > 0 and "chat_handler" not in kwargs:
@@ -244,10 +280,14 @@ def call_llm(
 
         grammar = load_grammar(GENERIC_JSON_OBJECT_GRAMMAR)
 
-    chat_messages = messages if messages is not None else [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
+    chat_messages = (
+        messages
+        if messages is not None
+        else [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+    )
 
     if LLM_BACKEND == "mlx" and not images:
         try:
@@ -293,10 +333,7 @@ def call_llm_audio(
     temperature: float = 0.0,
 ) -> str:
     if not MMPROJ_PATH:
-        raise RuntimeError(
-            "call_llm_audio requires LOKI_MMPROJ_PATH to be set "
-            "(Gemma4ChatHandler with audio support)"
-        )
+        raise RuntimeError("call_llm_audio requires LOKI_MMPROJ_PATH to be set (Gemma4ChatHandler with audio support)")
 
     import os
 
@@ -347,8 +384,7 @@ def call_llm_vision(
 ) -> str:
     if not MMPROJ_PATH:
         raise RuntimeError(
-            "call_llm_vision requires LOKI_MMPROJ_PATH to be set "
-            "(Gemma4ChatHandler with vision support)"
+            "call_llm_vision requires LOKI_MMPROJ_PATH to be set (Gemma4ChatHandler with vision support)"
         )
 
     import os

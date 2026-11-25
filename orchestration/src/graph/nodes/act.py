@@ -7,6 +7,9 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+from langgraph.errors import GraphInterrupt
+from langgraph.types import interrupt
+
 from src.graph.config import LokiState
 from src.graph.tools import get_native_tools, live_title, live_url
 from src.tools.utils.ax_locator import activate_app, wait_for_safari_ready
@@ -237,9 +240,7 @@ def _handle_type_text(
         try:
             from src.graph.site_knowledge import SiteKnowledge
 
-            resolved_pw = SiteKnowledge().resolve_password_for_domain(
-                state.get("current_url") or state.get("goal", "")
-            )
+            resolved_pw = SiteKnowledge().resolve_password_for_domain(state.get("current_url") or state.get("goal", ""))
             if resolved_pw:
                 text = resolved_pw
                 is_secret = True
@@ -288,9 +289,7 @@ def _generate_content(state: LokiState, description: str) -> str:
     agent = ContentAgent()
     findings = state.get("findings", [])
     if findings:
-        return agent.generate_from_findings(
-            description, findings, state.get("page_text", "")
-        )
+        return agent.generate_from_findings(description, findings, state.get("page_text", ""))
     if state.get("page_text"):
         return agent.generate_with_context(description, state.get("page_text"))
     return agent.generate(description)
@@ -353,9 +352,7 @@ def _write_file(title: str, text: str) -> str:
     return f"Saved {len(text)} chars to {path}"
 
 
-def _handle_write_content(
-    decision: dict[str, Any], state: LokiState, nt: dict[str, Any]
-) -> str:
+def _handle_write_content(decision: dict[str, Any], state: LokiState, nt: dict[str, Any]) -> str:
     destination = (decision.get("destination") or "").strip().lower()
     description = decision.get("description", "")
 
@@ -363,7 +360,9 @@ def _handle_write_content(
     title = _derive_title(state, description)
     LOGGER.info(
         "write_content: destination=%s, generated %d chars for: %s",
-        destination, len(text), description[:60],
+        destination,
+        len(text),
+        description[:60],
     )
 
     if destination in ("note", "notes", "apple notes", "notes app"):
@@ -447,7 +446,15 @@ def _handle_ask_user(decision: dict[str, Any], state: LokiState, updates: dict[s
     question = decision.get("question", "I need more information to proceed.")
     ask_fn = state.get("ask_user")
     if ask_fn:
+        # Blocking path kept for callers that hold their own lock (voice session).
         answer = ask_fn(question)
+        updates["user_answer"] = answer
+        return f"User answered: {answer}" if answer else "No answer from user"
+
+    if state.get("interruptible"):
+        # Pauses the graph; the checkpointer keeps state until resumed with the answer.
+        answer = interrupt({"question": question})
+        answer = answer if isinstance(answer, str) else ("" if answer is None else str(answer))
         updates["user_answer"] = answer
         return f"User answered: {answer}" if answer else "No answer from user"
 
@@ -503,6 +510,8 @@ def act_node(state: LokiState) -> dict[str, Any]:
             updates["result"] = result
         else:
             result = f"Unknown action: {action}"
+    except GraphInterrupt:
+        raise
     except Exception as exc:
         result = f"Error: {exc}"
         LOGGER.error("act failed: %s", exc)
@@ -512,13 +521,10 @@ def act_node(state: LokiState) -> dict[str, Any]:
         on_message("step", _human_label(action, decision, state.get("screen_elements", "")))
 
     raw_text_val = decision.get("text", "")
-    is_secret_entry = (
-        action == "type_text"
-        and (
-            raw_text_val.strip() == "{{password}}"
-            or "password" in str(decision.get("selector", "")).lower()
-            or "••••••••" in str(result)
-        )
+    is_secret_entry = action == "type_text" and (
+        raw_text_val.strip() == "{{password}}"
+        or "password" in str(decision.get("selector", "")).lower()
+        or "••••••••" in str(result)
     )
     safe_text_val = "{{password}}" if is_secret_entry else raw_text_val
     target_str = (

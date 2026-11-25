@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from src.graph.config import MAX_TURNS, PROMPT_COMPRESSION_ENABLED, TERSE_SYSTEM_ENABLED, LokiState
 from src.graph.grammars import extract_element_indices, grammar_for_step
+from src.graph.history import is_summary_entry, summarize_if_needed
 from src.graph.llm import call_llm, extract_json
 from src.graph.prompt_utils import (
     compress_elements,
@@ -24,17 +25,19 @@ _ITERATIVE_THRESHOLD = 40
 
 
 def _build_history_summary(history: list[dict]) -> tuple[str, set[str]]:
+    summary_entries = [h for h in history if is_summary_entry(h)]
+    history = [h for h in history if not is_summary_entry(h)]
     history_lines = []
     for i, h in enumerate(history[-4:]):
         res_short = str(h.get("result", ""))[:80]
-        history_lines.append(f"  {i+1}. {h.get('action')} {h.get('target', '')[:40]} → {res_short}")
+        history_lines.append(f"  {i + 1}. {h.get('action')} {h.get('target', '')[:40]} → {res_short}")
     history_block = "\n".join(history_lines) if history_lines else "  (none)"
-
+    if summary_entries:
+        earlier = str(summary_entries[0].get("result", "")).replace("\n", "; ")
+        history_block = f"  EARLIER: {earlier}\n{history_block}"
     failed_targets: set[str] = set()
     if len(history) >= 3:
-        target_counts = Counter(
-            (h.get("action"), h.get("target", "")) for h in history[-8:]
-        )
+        target_counts = Counter((h.get("action"), h.get("target", "")) for h in history[-8:])
         for (act, tgt), count in target_counts.items():
             if count >= 3 and tgt:
                 failed_targets.add(tgt)
@@ -47,17 +50,13 @@ def _build_history_summary(history: list[dict]) -> tuple[str, set[str]]:
     return history_block, failed_targets
 
 
-def _prepare_element_list(
-    raw_elements: str, is_native: bool, current_step: str, goal: str
-) -> str:
+def _prepare_element_list(raw_elements: str, is_native: bool, current_step: str, goal: str) -> str:
     if not raw_elements.strip():
         return ""
 
     lines = raw_elements.strip().split("\n")
     if len(lines) > _ITERATIVE_THRESHOLD:
-        capped = narrow_elements_iterative(
-            lines, current_step=current_step, goal=goal, top_k=_RANK_TOP_K
-        )
+        capped = narrow_elements_iterative(lines, current_step=current_step, goal=goal, top_k=_RANK_TOP_K)
     elif len(lines) > _MAX_ELEMENTS:
         if is_native:
             interactable = [line for line in lines if "[static]" not in line]
@@ -170,9 +169,12 @@ def _assemble_prompt(
     history = state.get("history", [])
     if history:
         last_entry = history[-1]
-        if last_entry.get("action") == "type_text" and "pressed return" not in str(last_entry.get("result", "")).lower():
+        if (
+            last_entry.get("action") == "type_text"
+            and "pressed return" not in str(last_entry.get("result", "")).lower()
+        ):
             user += (
-                '\nIMPORTANT: You JUST typed text in the previous turn. '
+                "\nIMPORTANT: You JUST typed text in the previous turn. "
                 'If it was a search or form input, press return now with {"action":"key_combo","combo":"return"}.\n'
             )
         elif (
@@ -181,7 +183,7 @@ def _assemble_prompt(
             and len(state.get("plan") or []) <= 1
         ):
             user += (
-                '\nIMPORTANT: You ALREADY opened the app in ACTIONS SO FAR and the goal is complete. '
+                "\nIMPORTANT: You ALREADY opened the app in ACTIONS SO FAR and the goal is complete. "
                 'Do NOT call open_app again — output {"action":"done","summary":"Opened application."}.\n'
             )
 
@@ -202,7 +204,8 @@ def reason_node(state: LokiState) -> dict[str, Any]:
     current_step = plan[plan_step] if plan and plan_step < len(plan) else ""
 
     history = state.get("history", [])
-    history_block, failed_targets = _build_history_summary(history)
+    summarized = summarize_if_needed(history)
+    history_block, failed_targets = _build_history_summary(summarized)
 
     cur_url = state.get("current_url", "")
     is_native = not bool(cur_url)
@@ -259,6 +262,8 @@ def reason_node(state: LokiState) -> dict[str, Any]:
         update: dict[str, Any] = {"next_action": decision, "done": is_done, "turn": turn + 1}
         if is_done:
             update["result"] = str(decision.get("summary") or decision.get("reason") or "")
+        if summarized is not history:
+            update["history"] = summarized
         return update
 
     except Exception as exc:

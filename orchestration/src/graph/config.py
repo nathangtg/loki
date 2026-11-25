@@ -15,10 +15,14 @@ LORA_ADAPTER_PATH = os.getenv("LOKI_LORA_PATH", "")
 SPECULATIVE_MODE = os.getenv("LOKI_SPECULATIVE_MODE", "none" if not DRAFT_MODEL_PATH else "draft_model")
 PROMPT_LOOKUP_NGRAM = int(os.getenv("LOKI_PROMPT_LOOKUP_NGRAM", "2"))
 PROMPT_LOOKUP_NUM_PRED = int(os.getenv("LOKI_PROMPT_LOOKUP_NUM_PRED", "10"))
-N_CTX = int(os.getenv("LOKI_N_CTX", "2048"))
+N_CTX = int(os.getenv("LOKI_N_CTX", "8192"))
 N_GPU_LAYERS = int(os.getenv("LOKI_N_GPU_LAYERS", "-1"))
 N_BATCH = int(os.getenv("LOKI_N_BATCH", "256"))
-KV_CACHE_TYPE = int(os.getenv("LOKI_KV_TYPE", "8"))
+# KV cache types: names (f16, q8_0, q4_0, ...) or raw ggml type ids. Invalid values fall back to q8_0.
+KV_TYPE_K = os.getenv("LOKI_KV_TYPE_K", os.getenv("LOKI_KV_TYPE", "q8_0")).strip()
+KV_TYPE_V = os.getenv("LOKI_KV_TYPE_V", os.getenv("LOKI_KV_TYPE", "q8_0")).strip()
+HISTORY_KEEP_RECENT = int(os.getenv("LOKI_HISTORY_KEEP_RECENT", "4"))
+HISTORY_SUMMARY_MAX_CHARS = int(os.getenv("LOKI_HISTORY_SUMMARY_MAX_CHARS", "600"))
 CHAT_FORMAT = os.getenv("LOKI_CHAT_FORMAT", "auto")
 PROMPT_CACHE_MB = int(os.getenv("LOKI_PROMPT_CACHE_MB", "0"))
 USE_MLOCK = os.getenv("LOKI_MLOCK", "0") in ("1", "true", "True")
@@ -33,7 +37,7 @@ class LokiState(TypedDict, total=False):
     on_step: Any
     on_message: Any
     ask_user: Any
-
+    interruptible: bool
     plan: list[str]
     plan_step: int
     plan_reasoning: str
